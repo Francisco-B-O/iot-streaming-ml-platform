@@ -1,0 +1,931 @@
+{
+    "info": {
+        "name": "IoT Telemetry Platform",
+        "description": "Complete API collection for IoT Platform with microservices, ML API, and JWT authentication",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "_postman_id": "iot-platform-2026",
+        "version": "1.0.0"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "1. AUTH",
+            "description": "Authentication endpoints for user registration and login",
+            "item": [
+                {
+                    "name": "Register User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"username\": \"developer\",\n  \"email\": \"developer@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"fullName\": \"Developer User\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/auth/register",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "register"
+                            ]
+                        },
+                        "description": "Register a new user in the system\n\n**Request Body:**\n- username: unique username\n- email: valid email address\n- password: strong password\n- fullName: user's full name\n\n**Response (201):**\n```json\n{\n  \"id\": \"user-uuid\",\n  \"username\": \"developer\",\n  \"email\": \"developer@example.com\",\n  \"message\": \"User registered successfully\"\n}\n```"
+                    }
+                },
+                {
+                    "name": "Login User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.environment.set(\"token\", jsonData.token);",
+                                    "    console.log(\"✓ JWT Token extracted and saved\");",
+                                    "    console.log(\"Token: \" + jsonData.token.substring(0, 20) + \"...\");",
+                                    "} else {",
+                                    "    console.log(\"✗ Login failed: \" + pm.response.code);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/auth/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Authenticate user and obtain JWT token\n\n**Request Body:**\n- username: admin / developer\n- password: user's password\n\n**Response (200):**\n```json\n{\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"username\": \"admin\",\n  \"expiresIn\": 3600\n}\n```\n\n**IMPORTANT:** This request automatically extracts the JWT token and saves it to the `token` environment variable for use in subsequent requests."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "2. DEVICES",
+            "description": "Device management endpoints",
+            "item": [
+                {
+                    "name": "Create Device",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Sensor A\",\n  \"type\": \"temperature\",\n  \"location\": \"Madrid\",\n  \"description\": \"Temperature sensor in main warehouse\",\n  \"serialNumber\": \"SNS-2026-001\",\n  \"status\": \"ACTIVE\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/devices",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "devices"
+                            ]
+                        },
+                        "description": "Create a new IoT device\n\n**Authorization:** Bearer Token required\n\n**Request Body:**\n- name: device name\n- type: temperature | humidity | vibration | multi-sensor\n- location: physical location\n- description: device description\n- serialNumber: unique serial number\n- status: ACTIVE | INACTIVE\n\n**Response (201):**\n```json\n{\n  \"id\": \"device-uuid\",\n  \"name\": \"Sensor A\",\n  \"type\": \"temperature\",\n  \"location\": \"Madrid\",\n  \"status\": \"ACTIVE\",\n  \"createdAt\": \"2026-03-31T10:00:00Z\"\n}\n```"
+                    }
+                },
+                {
+                    "name": "List All Devices",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/devices?page=0&size=20&sort=createdAt,desc",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "devices"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "0"
+                                },
+                                {
+                                    "key": "size",
+                                    "value": "20"
+                                },
+                                {
+                                    "key": "sort",
+                                    "value": "createdAt,desc"
+                                }
+                            ]
+                        },
+                        "description": "Get paginated list of all devices\n\n**Authorization:** Bearer Token required\n\n**Query Parameters:**\n- page: page number (0-indexed)\n- size: items per page\n- sort: sort criteria (createdAt,desc | name,asc)\n\n**Response (200):**\n```json\n{\n  \"content\": [\n    {\n      \"id\": \"device-uuid-1\",\n      \"name\": \"Sensor A\",\n      \"type\": \"temperature\",\n      \"location\": \"Madrid\",\n      \"status\": \"ACTIVE\",\n      \"lastDataPoint\": \"2026-03-31T10:30:00Z\"\n    }\n  ],\n  \"totalElements\": 15,\n  \"totalPages\": 1,\n  \"currentPage\": 0\n}\n```"
+                    }
+                },
+                {
+                    "name": "Get Device by ID",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/devices/device-uuid-1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "devices",
+                                "device-uuid-1"
+                            ]
+                        },
+                        "description": "Get detailed information about a specific device\n\n**Authorization:** Bearer Token required\n\n**Path Parameter:**\n- id: device UUID\n\n**Response (200):**\n```json\n{\n  \"id\": \"device-uuid-1\",\n  \"name\": \"Sensor A\",\n  \"type\": \"temperature\",\n  \"location\": \"Madrid\",\n  \"serialNumber\": \"SNS-2026-001\",\n  \"status\": \"ACTIVE\",\n  \"description\": \"Temperature sensor in main warehouse\",\n  \"createdAt\": \"2026-01-15T08:00:00Z\",\n  \"lastActivity\": \"2026-03-31T10:30:00Z\",\n  \"dataPointsCount\": 15432\n}\n```"
+                    }
+                },
+                {
+                    "name": "Update Device",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Sensor A Updated\",\n  \"location\": \"Madrid - Zone 1\",\n  \"status\": \"ACTIVE\",\n  \"description\": \"Updated description\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/devices/device-uuid-1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "devices",
+                                "device-uuid-1"
+                            ]
+                        },
+                        "description": "Update an existing device\n\n**Authorization:** Bearer Token required\n\n**Response (200):** Updated device object"
+                    }
+                },
+                {
+                    "name": "Delete Device",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/devices/device-uuid-1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "devices",
+                                "device-uuid-1"
+                            ]
+                        },
+                        "description": "Delete a device\n\n**Authorization:** Bearer Token required\n\n**Response (204):** No content"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "3. TELEMETRY",
+            "description": "Device telemetry data ingestion",
+            "item": [
+                {
+                    "name": "Send Telemetry Data",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"deviceId\": \"device-uuid-1\",\n  \"timestamp\": \"2026-03-31T10:30:45Z\",\n  \"temperature\": 25.5,\n  \"humidity\": 60,\n  \"vibration\": 0.02,\n  \"pressure\": 1013.25,\n  \"luminosity\": 450\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/telemetry",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "telemetry"
+                            ]
+                        },
+                        "description": "Ingest telemetry data from a device\n\n**Authorization:** Bearer Token required\n\n**Request Body:**\n- deviceId: UUID of the IoT device\n- timestamp: ISO 8601 timestamp\n- temperature: temperature in Celsius (optional)\n- humidity: humidity percentage (optional)\n- vibration: vibration level in mm/s (optional)\n- pressure: atmospheric pressure in hPa (optional)\n- luminosity: light level in lux (optional)\n\n**Response (202):**\n```json\n{\n  \"id\": \"telemetry-uuid\",\n  \"deviceId\": \"device-uuid-1\",\n  \"timestamp\": \"2026-03-31T10:30:45Z\",\n  \"status\": \"RECEIVED\"\n}\n```\n\n**Note:** Data is asynchronously processed by Kafka and anomaly detection pipeline."
+                    }
+                },
+                {
+                    "name": "Batch Telemetry Data",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "[\n  {\n    \"deviceId\": \"device-uuid-1\",\n    \"timestamp\": \"2026-03-31T10:30:45Z\",\n    \"temperature\": 25.5,\n    \"humidity\": 60\n  },\n  {\n    \"deviceId\": \"device-uuid-2\",\n    \"timestamp\": \"2026-03-31T10:30:45Z\",\n    \"temperature\": 28.3,\n    \"humidity\": 55\n  },\n  {\n    \"deviceId\": \"device-uuid-3\",\n    \"timestamp\": \"2026-03-31T10:30:45Z\",\n    \"temperature\": 22.1,\n    \"humidity\": 65\n  }\n]"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/telemetry/batch",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "telemetry",
+                                "batch"
+                            ]
+                        },
+                        "description": "Ingest multiple telemetry records in a single request\n\n**Authorization:** Bearer Token required\n\n**Request Body:** Array of telemetry objects\n\n**Response (202):**\n```json\n{\n  \"totalReceived\": 3,\n  \"successful\": 3,\n  \"failed\": 0\n}\n```"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "4. ALERTS",
+            "description": "System alerts and anomaly notifications",
+            "item": [
+                {
+                    "name": "Get All Alerts",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/alerts?status=ACTIVE&page=0&size=20",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "alerts"
+                            ],
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "ACTIVE"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "0"
+                                },
+                                {
+                                    "key": "size",
+                                    "value": "20"
+                                }
+                            ]
+                        },
+                        "description": "Retrieve all alerts in the system\n\n**Authorization:** Bearer Token required\n\n**Query Parameters:**\n- status: ACTIVE | RESOLVED | ACKNOWLEDGED\n- page: page number\n- size: items per page\n- severity: CRITICAL | HIGH | MEDIUM | LOW\n\n**Response (200):**\n```json\n{\n  \"content\": [\n    {\n      \"id\": \"alert-uuid-1\",\n      \"deviceId\": \"device-uuid-1\",\n      \"type\": \"ANOMALY_DETECTED\",\n      \"severity\": \"HIGH\",\n      \"message\": \"Temperature anomaly detected: 45.2°C (normal: 20-30°C)\",\n      \"status\": \"ACTIVE\",\n      \"createdAt\": \"2026-03-31T10:45:00Z\",\n      \"acknowledgedAt\": null\n    }\n  ],\n  \"totalElements\": 5,\n  \"totalPages\": 1\n}\n```"
+                    }
+                },
+                {
+                    "name": "Get Alert by ID",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/alerts/alert-uuid-1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "alerts",
+                                "alert-uuid-1"
+                            ]
+                        },
+                        "description": "Get detailed information about a specific alert\n\n**Authorization:** Bearer Token required"
+                    }
+                },
+                {
+                    "name": "Acknowledge Alert",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"ACKNOWLEDGED\",\n  \"notes\": \"Issue investigated - temperature sensor calibration needed\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/alerts/alert-uuid-1/acknowledge",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "alerts",
+                                "alert-uuid-1",
+                                "acknowledge"
+                            ]
+                        },
+                        "description": "Mark an alert as acknowledged\n\n**Authorization:** Bearer Token required"
+                    }
+                },
+                {
+                    "name": "Resolve Alert",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"RESOLVED\",\n  \"resolution\": \"Sensor recalibrated and verified\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/alerts/alert-uuid-1/resolve",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "alerts",
+                                "alert-uuid-1",
+                                "resolve"
+                            ]
+                        },
+                        "description": "Mark an alert as resolved\n\n**Authorization:** Bearer Token required"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "5. ANALYTICS",
+            "description": "Analytics and reporting endpoints",
+            "item": [
+                {
+                    "name": "Get System Analytics",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/analytics?timeRange=7d",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "analytics"
+                            ],
+                            "query": [
+                                {
+                                    "key": "timeRange",
+                                    "value": "7d"
+                                }
+                            ]
+                        },
+                        "description": "Get system-wide analytics and statistics\n\n**Authorization:** Bearer Token required\n\n**Query Parameters:**\n- timeRange: 1h | 24h | 7d | 30d | 90d\n\n**Response (200):**\n```json\n{\n  \"totalDevices\": 25,\n  \"activeDevices\": 24,\n  \"totalTelemetryPoints\": 450000,\n  \"anomaliesDetected\": 12,\n  \"alertsGenerated\": 8,\n  \"dataQuality\": 99.8,\n  \"averageLatency\": 145,\n  \"timeRange\": \"7d\"\n}\n```"
+                    }
+                },
+                {
+                    "name": "Get Device Analytics",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/analytics/device-uuid-1?timeRange=24h&metrics=temperature,humidity,anomalies",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "analytics",
+                                "device-uuid-1"
+                            ],
+                            "query": [
+                                {
+                                    "key": "timeRange",
+                                    "value": "24h"
+                                },
+                                {
+                                    "key": "metrics",
+                                    "value": "temperature,humidity,anomalies"
+                                }
+                            ]
+                        },
+                        "description": "Get analytics for a specific device\n\n**Authorization:** Bearer Token required\n\n**Path Parameter:**\n- deviceId: UUID of the device\n\n**Query Parameters:**\n- timeRange: time period (1h | 24h | 7d | 30d)\n- metrics: comma-separated metric names\n\n**Response (200):**\n```json\n{\n  \"deviceId\": \"device-uuid-1\",\n  \"timeRange\": \"24h\",\n  \"data\": {\n    \"temperature\": {\n      \"avg\": 24.5,\n      \"min\": 18.2,\n      \"max\": 32.8,\n      \"std\": 3.2,\n      \"dataPoints\": 1440\n    },\n    \"humidity\": {\n      \"avg\": 58.3,\n      \"min\": 35,\n      \"max\": 75\n    },\n    \"anomalies\": {\n      \"count\": 2,\n      \"timestamps\": [\"2026-03-31T08:15:00Z\", \"2026-03-31T14:30:00Z\"]\n    }\n  }\n}\n```"
+                    }
+                },
+                {
+                    "name": "Get Time Series Data",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/analytics/device-uuid-1/timeseries?metric=temperature&interval=1h&start=2026-03-24T00:00:00Z&end=2026-03-31T23:59:59Z",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "analytics",
+                                "device-uuid-1",
+                                "timeseries"
+                            ],
+                            "query": [
+                                {
+                                    "key": "metric",
+                                    "value": "temperature"
+                                },
+                                {
+                                    "key": "interval",
+                                    "value": "1h"
+                                },
+                                {
+                                    "key": "start",
+                                    "value": "2026-03-24T00:00:00Z"
+                                },
+                                {
+                                    "key": "end",
+                                    "value": "2026-03-31T23:59:59Z"
+                                }
+                            ]
+                        },
+                        "description": "Get time series data for charting and analysis\n\n**Authorization:** Bearer Token required\n\n**Query Parameters:**\n- metric: temperature | humidity | vibration | pressure\n- interval: 5m | 15m | 1h | 6h | 24h\n- start: ISO 8601 start timestamp\n- end: ISO 8601 end timestamp\n\n**Response (200):**\n```json\n{\n  \"deviceId\": \"device-uuid-1\",\n  \"metric\": \"temperature\",\n  \"interval\": \"1h\",\n  \"data\": [\n    {\"timestamp\": \"2026-03-24T00:00:00Z\", \"value\": 23.5},\n    {\"timestamp\": \"2026-03-24T01:00:00Z\", \"value\": 22.8},\n    {\"timestamp\": \"2026-03-24T02:00:00Z\", \"value\": 21.9}\n  ]\n}\n```"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "6. ML API",
+            "description": "Machine Learning API for anomaly detection and predictions",
+            "item": [
+                {
+                    "name": "Get Model Info",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{ml_url}}/model-info",
+                            "host": [
+                                "{{ml_url}}"
+                            ],
+                            "path": [
+                                "model-info"
+                            ]
+                        },
+                        "description": "Get information about the ML model\n\n**Response (200):**\n```json\n{\n  \"model_name\": \"Isolation Forest Anomaly Detector\",\n  \"version\": \"1.0.0\",\n  \"accuracy\": 0.9847,\n  \"features\": [\"temperature\", \"humidity\", \"vibration\", \"pressure\"],\n  \"threshold\": 0.75,\n  \"trained_on\": \"2026-03-15\",\n  \"samples_trained\": 250000\n}\n```"
+                    }
+                },
+                {
+                    "name": "Predict Anomaly",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"temperature\": 45.2,\n  \"humidity\": 75,\n  \"vibration\": 0.85,\n  \"pressure\": 1010.5\n}"
+                        },
+                        "url": {
+                            "raw": "{{ml_url}}/predict",
+                            "host": [
+                                "{{ml_url}}"
+                            ],
+                            "path": [
+                                "predict"
+                            ]
+                        },
+                        "description": "Predict if the given sensor values indicate an anomaly\n\n**Request Body:**\n- temperature: temperature in Celsius\n- humidity: relative humidity percentage\n- vibration: vibration level in mm/s\n- pressure: atmospheric pressure in hPa\n\n**Response (200):**\n```json\n{\n  \"is_anomaly\": true,\n  \"anomaly_score\": 0.92,\n  \"confidence\": 0.95,\n  \"reasoning\": \"Temperature is 15.2°C above normal operating range\",\n  \"recommendations\": [\n    \"Check sensor calibration\",\n    \"Verify environmental conditions\",\n    \"Review historical data\"\n  ]\n}\n```\n\n**Status Codes:**\n- 200: Prediction successful\n- 400: Invalid input data\n- 500: Model inference error"
+                    }
+                },
+                {
+                    "name": "Train Model",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"training_data_path\": \"/data/processed/training_set.parquet\",\n  \"validation_split\": 0.2,\n  \"random_state\": 42\n}"
+                        },
+                        "url": {
+                            "raw": "{{ml_url}}/train",
+                            "host": [
+                                "{{ml_url}}"
+                            ],
+                            "path": [
+                                "train"
+                            ]
+                        },
+                        "description": "Trigger ML model retraining\n\n**Request Body:**\n- training_data_path: path to training data\n- validation_split: validation data percentage\n- random_state: random seed for reproducibility\n\n**Response (202):**\n```json\n{\n  \"job_id\": \"training-job-uuid\",\n  \"status\": \"TRAINING_IN_PROGRESS\",\n  \"created_at\": \"2026-03-31T11:00:00Z\",\n  \"estimated_duration_minutes\": 30\n}\n```"
+                    }
+                },
+                {
+                    "name": "Get Training Status",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{ml_url}}/training/training-job-uuid",
+                            "host": [
+                                "{{ml_url}}"
+                            ],
+                            "path": [
+                                "training",
+                                "training-job-uuid"
+                            ]
+                        },
+                        "description": "Check the status of a training job\n\n**Response (200):**\n```json\n{\n  \"job_id\": \"training-job-uuid\",\n  \"status\": \"COMPLETED\",\n  \"accuracy\": 0.9847,\n  \"precision\": 0.9812,\n  \"recall\": 0.9892,\n  \"f1_score\": 0.9852,\n  \"completed_at\": \"2026-03-31T11:28:00Z\"\n}\n```"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "7. HEALTH & MONITORING",
+            "description": "Health checks and system monitoring",
+            "item": [
+                {
+                    "name": "Gateway Health",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/actuator/health",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "actuator",
+                                "health"
+                            ]
+                        },
+                        "description": "Check API Gateway health status\n\n**Response (200):**\n```json\n{\n  \"status\": \"UP\",\n  \"components\": {\n    \"db\": {\"status\": \"UP\"},\n    \"kafka\": {\"status\": \"UP\"},\n    \"redis\": {\"status\": \"UP\"}\n  }\n}\n```"
+                    }
+                },
+                {
+                    "name": "Detailed Health Metrics",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/actuator/health/details",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "actuator",
+                                "health",
+                                "details"
+                            ]
+                        },
+                        "description": "Get detailed health information for all components\n\n**Response (200):**\n```json\n{\n  \"status\": \"UP\",\n  \"timestamp\": \"2026-03-31T11:30:00Z\",\n  \"uptimeSeconds\": 86400,\n  \"components\": {\n    \"postgresql\": {\"status\": \"UP\", \"latency_ms\": 3},\n    \"kafka\": {\"status\": \"UP\", \"brokers\": 1},\n    \"redis\": {\"status\": \"UP\", \"memory_mb\": 256},\n    \"file_system\": {\"status\": \"UP\", \"disk_free_gb\": 50}\n  }\n}\n```"
+                    }
+                },
+                {
+                    "name": "Metrics (Prometheus)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/actuator/prometheus",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "actuator",
+                                "prometheus"
+                            ]
+                        },
+                        "description": "Get Prometheus metrics endpoint\n\n**Response (200):** Prometheus-format metrics\n\n**Useful Queries:**\n- `http_requests_total` - Total HTTP requests\n- `process_uptime_seconds` - Application uptime\n- `jvm_memory_used_bytes` - JVM memory usage\n- `kafka_messages_received` - Messages from Kafka"
+                    }
+                },
+                {
+                    "name": "ML API Health",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{ml_url}}/health",
+                            "host": [
+                                "{{ml_url}}"
+                            ],
+                            "path": [
+                                "health"
+                            ]
+                        },
+                        "description": "Check Python ML API health status\n\n**Response (200):**\n```json\n{\n  \"status\": \"healthy\",\n  \"model_loaded\": true,\n  \"model_size_mb\": 45.2,\n  \"uptime_seconds\": 3600,\n  \"requests_processed\": 1250\n}\n```"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "8. EXAMPLE WORKFLOWS",
+            "description": "Complete end-to-end workflow examples",
+            "item": [
+                {
+                    "name": "WORKFLOW: Full Onboarding & Testing",
+                    "description": "Complete workflow from user authentication to anomaly detection\n\n**Steps:**\n1. Login (extracts JWT token)\n2. Create a device\n3. Send telemetry data\n4. Check alerts\n5. View analytics\n6. Use ML API for prediction\n\n**Expected Outcome:** Demonstrates the complete flow of the system"
+                },
+                {
+                    "name": "WORKFLOW: Anomaly Detection Pipeline",
+                    "description": "Test the anomaly detection flow\n\n**Steps:**\n1. Send normal telemetry data\n2. Send abnormal telemetry data (high temperature)\n3. Check if alert was generated\n4. Use ML predict endpoint to get anomaly score\n5. Acknowledge and resolve alert\n\n**Expected Outcome:** Verify ML model detects and alerts on anomalies"
+                },
+                {
+                    "name": "WORKFLOW: Device Monitoring",
+                    "description": "Monitor multiple devices\n\n**Steps:**\n1. Create 3-5 devices with different types\n2. Send batch telemetry for all devices\n3. Retrieve analytics for each device\n4. Get system-wide analytics\n5. Monitor health metrics\n\n**Expected Outcome:** Validate monitoring visibility across fleet"
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8080",
+            "type": "string"
+        },
+        {
+            "key": "ml_url",
+            "value": "http://localhost:8000",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

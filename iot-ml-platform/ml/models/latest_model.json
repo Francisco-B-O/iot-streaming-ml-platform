@@ -1,0 +1,38 @@
+{
+    "latest_version": "20260406_121549",
+    "timestamp": "2026-04-06T12:15:49.883906",
+    "samples": 2096,
+    "features": [
+        "enrichedData.temperature",
+        "enrichedData.deviceType",
+        "enrichedData.humidity",
+        "enrichedData.vibration",
+        "feat_temperature_rolling_mean_5",
+        "feat_temperature_rolling_std_5",
+        "feat_temperature_rolling_min_5",
+        "feat_temperature_rolling_max_5",
+        "feat_temperature_delta",
+        "feat_deviceType_rolling_mean_5",
+        "feat_deviceType_rolling_std_5",
+        "feat_deviceType_rolling_min_5",
+        "feat_deviceType_rolling_max_5",
+        "feat_deviceType_delta",
+        "feat_humidity_rolling_mean_5",
+        "feat_humidity_rolling_std_5",
+        "feat_humidity_rolling_min_5",
+        "feat_humidity_rolling_max_5",
+        "feat_humidity_delta",
+        "feat_vibration_rolling_mean_5",
+        "feat_vibration_rolling_std_5",
+        "feat_vibration_rolling_min_5",
+        "feat_vibration_rolling_max_5",
+        "feat_vibration_delta"
+    ],
+    "metrics": {
+        "feature_count": 24,
+        "contamination": "auto",
+        "avg_anomaly_score": 0.046449955839886044,
+        "threshold": -0.05903048736591668,
+        "threshold_percentile": 5
+    }
+}

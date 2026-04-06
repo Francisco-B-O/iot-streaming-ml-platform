@@ -1,0 +1,328 @@
+"""
+FastAPI application for the IoT ML Platform.
+Provides endpoints for health checks, anomaly prediction, model training,
+anomaly statistics, and auto-retraining configuration.
+"""
+
+import logging
+import os
+import threading
+import time
+from typing import Dict, Any, List, Optional
+
+import pandas as pd
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from ml.predict import predictor
+from ml.train_model import ModelTrainer
+from ml import shared_state
+from storage.data_lake import data_lake
+from config.settings import settings
+from ingestion.kafka_consumer import KafkaIngestor
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="IoT ML Platform API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Prediction history and autotrain state live in ml.shared_state so the
+# Kafka consumer thread and the FastAPI handlers share the same objects.
+
+
+def _autotrain_loop():
+    """Background thread that triggers model retraining on a configurable schedule."""
+    while True:
+        time.sleep(60)  # check every minute
+        with shared_state.autotrain_lock:
+            enabled = shared_state.autotrain_config["enabled"]
+            interval_seconds = shared_state.autotrain_config["interval_hours"] * 3600
+
+        if not enabled:
+            continue
+
+        now = time.time()
+        if shared_state.last_train_time is None or (now - shared_state.last_train_time) >= interval_seconds:
+            try:
+                logger.info("Auto-retrain triggered.")
+                trainer = ModelTrainer()
+                model = trainer.train_anomaly_model()
+                if model:
+                    predictor.load_model()
+                    shared_state.last_train_time = time.time()
+                    logger.info(f"Auto-retrain completed. New threshold: {predictor.threshold:.4f}")
+            except Exception as e:
+                logger.error(f"Auto-retrain failed: {e}", exc_info=True)
+
+
+_autotrain_thread = threading.Thread(target=_autotrain_loop, daemon=True)
+_autotrain_thread.start()
+
+# Start Kafka consumer in the same process so it shares shared_state memory
+def _run_consumer():
+    try:
+        ingestor = KafkaIngestor()
+        ingestor.consume_events()
+    except Exception as e:
+        logger.error(f"Kafka consumer thread crashed: {e}", exc_info=True)
+
+_consumer_thread = threading.Thread(target=_run_consumer, daemon=True)
+_consumer_thread.start()
+
+
+# ---------------------------------------------------------------------------
+# Request / Response schemas
+# ---------------------------------------------------------------------------
+
+class PredictionRequest(BaseModel):
+    device_id: str = Field(..., alias="deviceId")
+    timestamp: str
+    enriched_data: Dict[str, Any] = Field(..., alias="enrichedData")
+
+    class Config:
+        populate_by_name = True
+
+
+class BatchPredictionRequest(BaseModel):
+    device_id: str = Field(..., alias="deviceId")
+    events: List[Dict[str, Any]]
+
+    class Config:
+        populate_by_name = True
+
+
+class PredictionResponse(BaseModel):
+    is_anomaly: bool
+    anomaly_score: float
+    prediction: str
+    threshold: float
+
+
+class BatchPredictionResponse(BaseModel):
+    device_id: str
+    results: List[PredictionResponse]
+
+
+class AutoTrainRequest(BaseModel):
+    enabled: bool
+    interval_hours: float = 6.0
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/health")
+def health_check() -> Dict[str, Any]:
+    return {
+        "status": "healthy",
+        "model_version": predictor.current_version,
+        "threshold": predictor.threshold,
+    }
+
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict(request: PredictionRequest) -> Dict[str, Any]:
+    """Score a single telemetry event for anomaly and record the result."""
+    try:
+        event_data = request.model_dump(by_alias=True)
+        is_anomaly, score = predictor.predict_anomaly(event_data)
+
+        # Store in shared prediction history
+        with shared_state.history_lock:
+            shared_state.prediction_history.append({
+                "device_id":  request.device_id,
+                "timestamp":  request.timestamp,
+                "is_anomaly": is_anomaly,
+                "score":      round(score, 4),
+            })
+
+        logger.info(
+            f"Prediction for {request.device_id}: "
+            f"is_anomaly={is_anomaly}, score={score:.4f}"
+        )
+        return {
+            "is_anomaly": is_anomaly,
+            "anomaly_score": score,
+            "prediction": "ANOMALY" if is_anomaly else "NORMAL",
+            "threshold": predictor.threshold,
+        }
+    except Exception as e:
+        logger.error(f"Error during prediction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error during prediction.")
+
+
+@app.post("/predict/batch", response_model=BatchPredictionResponse)
+def predict_batch(request: BatchPredictionRequest) -> Dict[str, Any]:
+    """Score a time-ordered sequence of events for a single device."""
+    try:
+        if not request.events:
+            raise HTTPException(status_code=400, detail="events list cannot be empty.")
+
+        events = [
+            {**e, "deviceId": request.device_id}
+            if "deviceId" not in e else e
+            for e in request.events
+        ]
+
+        results_raw = predictor.predict_window(events)
+        results = [
+            {
+                "is_anomaly": is_anom,
+                "anomaly_score": score,
+                "prediction": "ANOMALY" if is_anom else "NORMAL",
+                "threshold": predictor.threshold,
+            }
+            for is_anom, score in results_raw
+        ]
+
+        # Store batch results in shared history
+        with shared_state.history_lock:
+            for event, (is_anom, score) in zip(request.events, results_raw):
+                shared_state.prediction_history.append({
+                    "device_id":  request.device_id,
+                    "timestamp":  event.get("timestamp", ""),
+                    "is_anomaly": is_anom,
+                    "score":      round(score, 4),
+                })
+
+        logger.info(
+            f"Batch prediction for {request.device_id}: "
+            f"{len(results)} events, "
+            f"{sum(1 for r in results if r['is_anomaly'])} anomalies detected."
+        )
+        return {"device_id": request.device_id, "results": results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during batch prediction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error during batch prediction.")
+
+
+_stats_cache: Dict[str, Any] = {}
+_stats_cache_time: float = 0.0
+_STATS_CACHE_TTL = 60.0  # seconds
+
+@app.get("/stats")
+def get_stats() -> Dict[str, Any]:
+    """Data lake summary statistics (cached for 60 s to avoid full lake scan on every call)."""
+    global _stats_cache, _stats_cache_time
+    now = time.time()
+    if _stats_cache and (now - _stats_cache_time) < _STATS_CACHE_TTL:
+        return _stats_cache
+    try:
+        df = data_lake.get_latest_data(limit=1000)
+        if df.empty:
+            result = {"total_events": 0, "devices": [], "latest_timestamp": None}
+        else:
+            result = {
+                "total_events": len(df),
+                "devices": df['deviceId'].unique().tolist() if 'deviceId' in df.columns else [],
+                "latest_timestamp": str(df['timestamp'].max()) if 'timestamp' in df.columns else None,
+            }
+        _stats_cache = result
+        _stats_cache_time = now
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching stats: {e}", exc_info=True)
+        return {"error": "Could not retrieve statistics", "total_events": 0, "devices": []}
+
+
+@app.post("/train")
+def train_model() -> Dict[str, Any]:
+    """Trigger a manual model retraining."""
+    try:
+        logger.info("Starting manual model retraining.")
+        trainer = ModelTrainer()
+        model = trainer.train_anomaly_model()
+        if model:
+            predictor.load_model()
+            shared_state.last_train_time = time.time()
+            logger.info(
+                f"Model retrained and reloaded. New threshold: {predictor.threshold:.4f}"
+            )
+            return {
+                "status": "success",
+                "message": "Model retrained successfully.",
+                "threshold": predictor.threshold,
+                "model_version": predictor.current_version,
+            }
+        raise HTTPException(status_code=500, detail="Training returned no model. Check logs.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during model training: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error during training: {str(e)}")
+
+
+@app.get("/anomaly-stats")
+def get_anomaly_stats() -> Dict[str, Any]:
+    """
+    Returns aggregated statistics from the in-memory prediction history.
+    Includes total predictions, anomaly count, anomaly rate, breakdown by device,
+    and the 10 most recent anomalies.
+    """
+    with shared_state.history_lock:
+        history = list(shared_state.prediction_history)
+
+    if not history:
+        return {
+            "total_predictions": 0,
+            "anomaly_count": 0,
+            "anomaly_rate": 0.0,
+            "anomalies_by_device": {},
+            "recent_anomalies": [],
+        }
+
+    anomalies = [p for p in history if p["is_anomaly"]]
+
+    by_device: Dict[str, int] = {}
+    for p in anomalies:
+        did = p["device_id"]
+        by_device[did] = by_device.get(did, 0) + 1
+
+    recent_anomalies = [p for p in reversed(history) if p["is_anomaly"]][:10]
+
+    return {
+        "total_predictions": len(history),
+        "anomaly_count": len(anomalies),
+        "anomaly_rate": round(len(anomalies) / len(history) * 100, 1),
+        "anomalies_by_device": by_device,
+        "recent_anomalies": recent_anomalies,
+    }
+
+
+@app.get("/autotrain")
+def get_autotrain() -> Dict[str, Any]:
+    """Returns the current auto-retrain configuration and last train timestamp."""
+    with shared_state.autotrain_lock:
+        config = dict(shared_state.autotrain_config)
+    config["last_train_time"] = shared_state.last_train_time
+    return config
+
+
+@app.post("/autotrain")
+def set_autotrain(req: AutoTrainRequest) -> Dict[str, Any]:
+    """Updates the auto-retrain schedule configuration."""
+    with shared_state.autotrain_lock:
+        shared_state.autotrain_config["enabled"] = req.enabled
+        shared_state.autotrain_config["interval_hours"] = req.interval_hours
+    logger.info(f"Auto-retrain config updated: enabled={req.enabled}, interval={req.interval_hours}h")
+    return {"status": "ok", "config": dict(shared_state.autotrain_config)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host=settings.API_HOST, port=settings.API_PORT)
