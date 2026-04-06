@@ -127,10 +127,23 @@ jobs:
           cd frontend
           npm install
 
+      - name: Test
+        run: |
+          cd frontend
+          npm run test:ci
+
       - name: Build
         run: |
           cd frontend
           npm run build
+
+      - name: Upload Angular coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: angular-coverage
+          path: frontend/coverage/
+          retention-days: 7
 
   # ─────────────────────────────────────────────────────────────
   # Job 4 — SonarCloud: Java + Python + TypeScript in one scan
@@ -173,6 +186,17 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:.
           pytest tests/ --cov=. --cov-report=xml:coverage.xml \
             --cov-config=.coveragerc || true
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Angular coverage
+        run: |
+          cd frontend
+          npm install
+          npm run test:ci || true
 
       - name: Build Java & generate JaCoCo reports
         run: |
