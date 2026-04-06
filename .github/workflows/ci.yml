@@ -107,15 +107,41 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────────────────────────
-  # Job 3 — SonarCloud analysis (runs after tests, uses coverage)
-  # Requires secret: SONAR_TOKEN (see README for setup steps)
+  # Job 3 — Angular: build (lint + compile)
+  # ─────────────────────────────────────────────────────────────
+  frontend-ci:
+    name: Angular — Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build
+        run: |
+          cd frontend
+          npm run build -- --configuration production
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 4 — SonarCloud: Java + Python + TypeScript in one scan
+  # Requires secret: SONAR_TOKEN
   # ─────────────────────────────────────────────────────────────
   sonar:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: [java-test, python-ci]
+    needs: [java-test, python-ci, frontend-ci]
     # Run even if tests failed so Sonar still reports issues
-    if: ${{ !cancelled() && (needs.java-test.result == 'success' || needs.java-test.result == 'failure') }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'cancelled') }}
 
     steps:
       - name: Checkout
@@ -141,23 +167,20 @@ jobs:
           cd iot-ml-platform
           pip install -r requirements.txt pytest pytest-cov
 
-      - name: Generate Python coverage for Sonar
+      - name: Generate Python coverage
         run: |
           cd iot-ml-platform
           export PYTHONPATH=$PYTHONPATH:.
           pytest tests/ --cov=. --cov-report=xml:coverage.xml \
             --cov-config=.coveragerc || true
 
-      - name: Build Java, run tests & SonarCloud analysis
+      - name: Build Java & generate JaCoCo reports
+        run: |
+          cd spring-event-iot-platform
+          mvn verify -T 2 --batch-mode -q
+
+      - name: SonarCloud Scan (Java + Python + TypeScript)
+        uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          cd spring-event-iot-platform
-          mvn verify sonar:sonar \
-            -T 2 --batch-mode \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.organization=francisco-b-o \
-            -Dsonar.projectKey=Francisco-B-O_iot-streaming-ml-platform \
-            -Dsonar.python.coverage.reportPaths=../iot-ml-platform/coverage.xml \
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }}
