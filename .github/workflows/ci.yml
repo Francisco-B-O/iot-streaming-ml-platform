@@ -96,7 +96,7 @@ jobs:
             --cov=. \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
-            --cov-omit="**/tests/**,**/__init__.py"
+            --cov-config=.coveragerc
 
       - name: Upload Python coverage XML
         uses: actions/upload-artifact@v4
@@ -146,7 +146,7 @@ jobs:
           cd iot-ml-platform
           export PYTHONPATH=$PYTHONPATH:.
           pytest tests/ --cov=. --cov-report=xml:coverage.xml \
-            --cov-omit="**/tests/**,**/__init__.py" || true
+            --cov-config=.coveragerc || true
 
       - name: Build Java & generate JaCoCo reports
         run: |
@@ -161,4 +161,8 @@ jobs:
           cd spring-event-iot-platform
           mvn sonar:sonar \
             --batch-mode \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.organization=francisco-b-o \
+            -Dsonar.projectKey=Francisco-B-O_iot-streaming-ml-platform \
+            -Dsonar.python.coverage.reportPaths=../iot-ml-platform/coverage.xml \
             -Dsonar.token=${{ secrets.SONAR_TOKEN }}
