@@ -130,7 +130,7 @@ jobs:
       - name: Build
         run: |
           cd frontend
-          npm run build -- --configuration production
+          npm run build
 
   # ─────────────────────────────────────────────────────────────
   # Job 4 — SonarCloud: Java + Python + TypeScript in one scan
