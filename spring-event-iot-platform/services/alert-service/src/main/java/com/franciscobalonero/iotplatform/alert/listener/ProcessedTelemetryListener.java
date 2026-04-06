@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 /**
@@ -59,7 +60,7 @@ public class ProcessedTelemetryListener {
                     .deviceId(event.getDeviceId())
                     .severity(severity)
                     .message(message)
-                    .timestamp(LocalDateTime.now())
+                    .timestamp(LocalDateTime.now(ZoneOffset.UTC))
                     .acknowledged(false)
                     .build();
 

@@ -12,7 +12,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * Service class for retrieving device analytics from Redis.
@@ -30,6 +29,9 @@ public class AnalyticsService {
     private static final String EVENT_COUNT_KEY = "analytics:event-count:";
     private static final String LAST_SEEN_KEY   = "analytics:last-seen:";
     private static final String HISTORY_KEY     = "analytics:history:";
+
+    private static final TypeReference<Map<String, Object>> MAP_TYPE_REF =
+            new TypeReference<>() {};
 
     /**
      * Retrieves stats for a device: event count and last-seen timestamp.
@@ -63,13 +65,13 @@ public class AnalyticsService {
         return raw.stream()
                 .map(entry -> {
                     try {
-                        return objectMapper.readValue(entry, new TypeReference<Map<String, Object>>() {});
+                        return objectMapper.readValue(entry, MAP_TYPE_REF);
                     } catch (Exception e) {
                         log.warn("Unparseable history entry: {}", entry);
                         return null;
                     }
                 })
                 .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+                .toList();
     }
 }

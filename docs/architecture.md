@@ -14,10 +14,10 @@ Multi-module Maven project. Java 21, Spring Boot 3.4.1.
 | discovery-service | 8761 | Eureka registry. All Spring services register here on startup |
 | auth-service | 8088 (internal) | Login, registration, JWT issuance |
 | ingestion-service | internal | Receives telemetry POSTs, publishes to `device-data-received` |
-| processing-service | internal | Consumes `device-data-received`, enriches events, publishes to `device-data-processed` |
+| processing-service | internal | Consumes `device-data-received`, enriches events, applies configurable alert rules, publishes to `device-data-processed` |
 | device-service | internal | Device CRUD backed by PostgreSQL |
 | alert-service | internal | Consumes `device-data-processed`, applies thresholds, writes alerts to PostgreSQL |
-| analytics-service | internal | Consumes `device-data-received`, increments Redis counters per device |
+| analytics-service | internal | Consumes `device-data-received`, maintains per-device event counts, last-seen timestamps, and a telemetry history ring-buffer in Redis |
 | notification-service | internal | Consumes `alert-created`, handles notification delivery |
 
 "Internal" means `expose` only (not `ports`) in docker-compose.yml — reachable within the Docker network, not from the host.
@@ -28,9 +28,9 @@ Python 3.11. FastAPI (port 8000) + Kafka consumer.
 
 | Component | Description |
 |-----------|-------------|
-| `api/app.py` | FastAPI server: `/health`, `/predict`, `/predict/batch`, `/train`, `/stats` |
+| `api/app.py` | FastAPI server: `/health`, `/predict`, `/predict/batch`, `/train`, `/stats`, `/anomaly-stats`, `/autotrain` |
 | `ingestion/kafka_consumer.py` | Consumes `device-data-processed`, scores each event, publishes to `ml-predictions` / `ml-anomalies` |
-| `ml/` | Isolation Forest training and prediction logic |
+| `ml/` | Isolation Forest training and prediction logic. Shared in-memory prediction history (deque, maxlen=500) |
 | `processing/` | Feature engineering (rolling stats, deltas) |
 | `storage/` | Parquet data lake, partitioned by day |
 
@@ -45,7 +45,7 @@ Angular 17, served by nginx in Docker. Port 4200.
 | kafka | 9092 (ext), 29092 (int) | Message broker |
 | zookeeper | internal | Kafka coordination |
 | postgres | internal | Shared PostgreSQL instance (3 databases/schemas) |
-| redis | internal | Analytics event counters |
+| redis | internal | Analytics event counters, last-seen timestamps, telemetry history |
 | zipkin | 9411 | Distributed tracing |
 | prometheus | 9090 | Metrics scraping |
 | grafana | 3000 | Dashboards (admin/admin) |
@@ -73,7 +73,7 @@ Endpoints excluded from auth in the gateway:
 - `POST /api/v1/auth/register`
 - `/actuator/**`
 
-Tokens expire in 24 hours (`expiresIn: 86400`).
+Tokens expire in 1 hour by default (`JWT_EXPIRATION=3600000` ms).
 
 ---
 
@@ -81,12 +81,23 @@ Tokens expire in 24 hours (`expiresIn: 86400`).
 
 | Store | Used by | Content |
 |-------|---------|---------|
-| PostgreSQL | auth-service, device-service, processing-service, alert-service | Users, devices, processed events, alerts |
-| Redis | analytics-service | Per-device event counters |
+| PostgreSQL | auth-service, device-service, processing-service, alert-service | Users, devices, rules, idempotency records, alerts |
+| Redis | analytics-service | Per-device event counts (`analytics:event-count:{id}`), last-seen timestamps (`analytics:last-seen:{id}`), telemetry history ring-buffer (`analytics:history:{id}`, capped at 50 entries) |
 | Parquet files | iot-ml-platform | Raw telemetry events, partitioned by day (`data/raw/day=YYYY-MM-DD/`) |
 | Model files | iot-ml-platform | Trained Isolation Forest joblib + metadata JSON (`ml/models/`) |
+| In-memory | iot-ml-platform | Prediction history deque (maxlen=500), auto-retrain config |
 
 Schema management: `spring.jpa.hibernate.ddl-auto: update` — tables are created/updated automatically on service startup. No migration tool.
+
+---
+
+## Alert Rules
+
+Temperature thresholds are stored in the `rules` table (PostgreSQL, processing-service) and evaluated at runtime:
+- `temp > threshold` → CRITICAL event → HIGH alert
+- `temp > threshold * 0.8` → WARNING event → MEDIUM alert
+
+Default threshold: 100°C. Configurable at runtime without restart via `POST /api/v1/rules/temperature` through the gateway.
 
 ---
 
@@ -107,3 +118,4 @@ The current setup is single-host Docker Compose. For production:
 - Redis is single-node; analytics counters would need Redis Cluster for high write throughput
 - PostgreSQL is shared across services in a single container — separate managed instances recommended per service in production
 - The ML Kafka consumer has retry logic (30 attempts, 2s backoff) for subscription failures; the model is loaded once at startup and predictions are synchronous per event
+- The ML prediction history is in-memory and resets on restart — for persistence, it would need to be backed by Redis or a time-series store

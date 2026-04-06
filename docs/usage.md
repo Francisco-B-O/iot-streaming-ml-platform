@@ -38,6 +38,10 @@ Register and manage IoT sensors.
 
 **Search** — filters the device table by device ID, type, or status in real time.
 
+**Online/Offline badge** — each device row shows a live badge: green "Online" if the device sent telemetry within the last 2 minutes, grey "Offline" otherwise. Derived from the `lastSeen` field returned by the analytics service.
+
+**Last Seen column** — shows a human-readable relative time (e.g. "3 min ago", "1 hr ago") or "Never" if no telemetry has been received yet.
+
 **Send telemetry** (sensor icon per row) — opens a modal to manually push a reading for that device:
 - Adjust temperature, humidity, and vibration sliders or type values directly
 - Quick presets: **Normal** (22°C / 55% / 0.01 m/s²), **Warning** (75°C / 85% / 3.5 m/s²), **Critical** (115°C / 95% / 8.0 m/s²)
@@ -66,9 +70,15 @@ Alerts are generated automatically by the processing pipeline when sensor readin
 
 **Status filter** — All / Pending / Acknowledged pills at the top right.
 
-**Acknowledge** — click the check icon on any alert to mark it acknowledged. The badge count in the sidebar nav updates automatically.
+**Acknowledge** — click the check icon on any alert to mark it acknowledged. The badge count in the sidebar nav and the topbar notification bell update automatically.
 
 **Acknowledge All** — acknowledges all currently unacknowledged alerts in one click.
+
+**Export CSV** — downloads all currently visible alerts (respecting active filters) as a CSV file. Columns: ID, Device, Severity, Status, Message, Timestamp.
+
+**Alert Rules panel** — click "Alert Rules" to expand the side panel. Shows the current temperature threshold (default: 100°C). Edit the value and click Save to update the threshold immediately — no service restart needed. Changes apply to the next telemetry event processed:
+- Temperature > threshold → CRITICAL → HIGH alert
+- Temperature > threshold × 0.8 → WARNING → MEDIUM alert
 
 The page auto-refreshes every 10 seconds. Total and unacknowledged counts are shown in the header.
 
@@ -80,9 +90,14 @@ Per-device and comparative event statistics.
 
 On load, the page fetches event counts for all registered devices in parallel. The bar chart and stats table show how events are distributed across devices, including each device's share (%) with a progress bar.
 
-Select a specific device from the dropdown and click **Load Stats** to highlight it in the table and show its total event count as a KPI card.
+Select a specific device from the dropdown or click its name in the stats table to select it.
 
-Clicking a device name in the table selects it directly.
+**Telemetry History chart** — after selecting a device, click "Load History" to fetch the last 50 telemetry readings. The chart has three tabs:
+- **Temperature** — readings in °C over time
+- **Humidity** — readings in % over time
+- **Vibration** — readings in m/s² over time
+
+The x-axis is the event timestamp. Data comes from the Redis ring-buffer maintained by the analytics service.
 
 ---
 
@@ -90,7 +105,12 @@ Clicking a device name in the table selects it directly.
 
 Interface for the IsolationForest anomaly detection engine.
 
-**Stats KPIs** — events in the data lake, number of tracked devices, platform online/offline status, last event timestamp.
+**Anomaly Stats KPIs** (from `/anomaly-stats`):
+- Total predictions recorded in the session (in-memory, resets on restart)
+- Anomaly count and anomaly rate as a percentage
+- Number of affected devices
+
+**Recent anomalies list** — the 10 most recent anomalous predictions: device ID, timestamp, and anomaly score. Color-coded by score severity.
 
 **Devices in ML Data Lake** — chip list of device IDs that have data stored in Parquet format.
 
@@ -101,6 +121,18 @@ Interface for the IsolationForest anomaly detection engine.
 4. Click **Run Prediction** — result shows anomaly score, prediction label, and color-coded outcome
 
 **Model Training** — click **Retrain Model** to trigger a full training run on the Parquet data lake. Training reads up to 10,000 records, fits the Isolation Forest, computes a threshold at the 5th percentile of training scores, and saves the model. The result message confirms completion or reports errors.
+
+**Auto-retrain toggle** — enable automatic periodic retraining:
+- Toggle the switch to enable/disable
+- Set the interval in hours (e.g. 4 for every 4 hours)
+- Click Save — a background daemon thread in the ML service will trigger retraining on the configured schedule
+- The current config and last train time are shown below the toggle
+
+---
+
+## Notification Bell
+
+The topbar bell icon shows a badge with the count of pending CRITICAL alerts. Clicking it opens a dropdown with the most recent unacknowledged critical alerts (device, message, time). Clicking an alert navigates to the Alerts page. The count auto-refreshes every 30 seconds.
 
 ---
 

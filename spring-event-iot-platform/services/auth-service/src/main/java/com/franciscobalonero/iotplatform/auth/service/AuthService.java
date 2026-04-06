@@ -10,6 +10,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Set;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -24,19 +26,19 @@ public class AuthService {
             userRepository.save(User.builder()
                     .username("admin")
                     .password(passwordEncoder.encode("admin123"))
-                    .roles(java.util.Set.of("ROLE_ADMIN"))
+                    .roles(Set.of("ROLE_ADMIN"))
                     .build());
         }
     }
 
     public String login(String username, String password) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new org.springframework.security.authentication.BadCredentialsException("Invalid username or password"));
+                .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
 
         if (passwordEncoder.matches(password, user.getPassword())) {
             return jwtUtil.generateToken(username, user.getRoles());
         } else {
-            throw new org.springframework.security.authentication.BadCredentialsException("Invalid username or password");
+            throw new BadCredentialsException("Invalid username or password");
         }
     }
 
@@ -48,7 +50,7 @@ public class AuthService {
         userRepository.save(User.builder()
                 .username(username)
                 .password(passwordEncoder.encode(password))
-                .roles(java.util.Set.of("ROLE_USER"))
+                .roles(Set.of("ROLE_USER"))
                 .build());
     }
 }

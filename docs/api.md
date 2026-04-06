@@ -21,7 +21,7 @@ Content-Type: application/json
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expiresIn": 86400
+  "expiresIn": 3600
 }
 ```
 
@@ -129,19 +129,62 @@ Authorization: Bearer {token}
 
 ---
 
+## Alert Rules
+
+### Get temperature threshold
+```http
+GET /rules/temperature
+Authorization: Bearer {token}
+```
+```json
+100.0
+```
+
+### Update temperature threshold
+```http
+POST /rules/temperature
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "threshold": 90
+}
+```
+
+Alert logic: `temp > threshold` → CRITICAL alert (HIGH severity), `temp > threshold * 0.8` → WARNING alert (MEDIUM severity).
+
+---
+
 ## Analytics
 
-### System summary
+### Device stats (event count + last seen)
 ```http
-GET /analytics
+GET /analytics/stats/{deviceId}
 Authorization: Bearer {token}
+```
+```json
+{
+  "deviceId": "sensor-01",
+  "eventCount": 142,
+  "lastSeen": 1743850000000
+}
 ```
 
-### Per device
+`lastSeen` is epoch milliseconds. Null if no telemetry has been received yet. The frontend uses a 2-minute window to determine online/offline status.
+
+### Telemetry history (last 50 snapshots)
 ```http
-GET /analytics/{deviceId}
+GET /analytics/history/{deviceId}
 Authorization: Bearer {token}
 ```
+```json
+[
+  {"ts": 1743850000000, "temperature": 24.5, "humidity": 52.0, "vibration": 0.12},
+  {"ts": 1743849940000, "temperature": 23.8, "humidity": 51.5, "vibration": 0.10}
+]
+```
+
+Newest first. Maximum 50 entries per device, stored in Redis.
 
 ---
 
@@ -212,6 +255,61 @@ POST http://localhost:8000/train
 GET http://localhost:8000/stats
 ```
 
+### Anomaly statistics
+```http
+GET http://localhost:8000/anomaly-stats
+```
+```json
+{
+  "total_predictions": 320,
+  "anomaly_count": 14,
+  "anomaly_rate": 4.4,
+  "anomalies_by_device": {
+    "sensor-01": 9,
+    "sensor-02": 5
+  },
+  "recent_anomalies": [
+    {"device_id": "sensor-01", "timestamp": "2026-04-06T10:12:00Z", "is_anomaly": true, "score": -0.184}
+  ]
+}
+```
+
+Stats are computed from an in-memory deque (max 500 entries) and reset on service restart.
+
+### Get auto-retrain config
+```http
+GET http://localhost:8000/autotrain
+```
+```json
+{
+  "enabled": false,
+  "interval_hours": 6.0,
+  "last_train_time": null
+}
+```
+
+### Set auto-retrain config
+```http
+POST http://localhost:8000/autotrain
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "interval_hours": 4.0
+}
+```
+```json
+{
+  "status": "ok",
+  "config": {
+    "enabled": true,
+    "interval_hours": 4.0
+  }
+}
+```
+
+The background thread checks every minute and triggers retraining when the configured interval has elapsed.
+
 ---
 
 ## Error codes
@@ -221,5 +319,6 @@ GET http://localhost:8000/stats
 | 401 | Missing or invalid JWT |
 | 403 | Insufficient role |
 | 404 | Resource not found |
+| 409 | Conflict (e.g. duplicate user) |
 | 429 | Rate limited |
 | 500 | Server error |

@@ -9,8 +9,9 @@ The ML platform is a separate Python service (`iot-ml-platform/`) that:
 2. Scores each event with an Isolation Forest model
 3. Publishes predictions back to Kafka (`ml-predictions`, `ml-anomalies`)
 4. Stores all events (with scores) in a local Parquet data lake
+5. Maintains an in-memory prediction history (last 500 predictions) for real-time stats
 
-A FastAPI server (`port 8000`) also exposes the model for direct prediction calls.
+A FastAPI server (`port 8000`) also exposes the model for direct prediction calls and operational management.
 
 ---
 
@@ -108,13 +109,16 @@ ml/models/
 
 ## API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check + model version + threshold |
-| POST | `/predict` | Score a single event (fetches data lake context internally) |
-| POST | `/predict/batch` | Score a time-ordered sequence of events explicitly |
-| POST | `/train` | Retrain model on data lake history |
-| GET | `/stats` | Data lake summary |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | — | Health check + model version + threshold |
+| POST | `/predict` | — | Score a single event (fetches data lake context internally) |
+| POST | `/predict/batch` | — | Score a time-ordered sequence of events explicitly |
+| POST | `/train` | — | Retrain model on data lake history |
+| GET | `/stats` | — | Data lake summary (cached 60 s) |
+| GET | `/anomaly-stats` | — | Aggregated stats from in-memory prediction history |
+| GET | `/autotrain` | — | Current auto-retrain config and last train timestamp |
+| POST | `/autotrain` | — | Enable/disable auto-retraining and set interval |
 
 Full interactive docs at `http://localhost:8000/docs`.
 
@@ -163,6 +167,49 @@ Content-Type: application/json
 ```
 
 Events must be ordered oldest-first. Each event is scored using all preceding events in the list (plus data lake history for the first few) as rolling context.
+
+### Anomaly statistics
+
+```http
+GET http://localhost:8000/anomaly-stats
+```
+
+```json
+{
+  "total_predictions": 320,
+  "anomaly_count": 14,
+  "anomaly_rate": 4.4,
+  "anomalies_by_device": {
+    "sensor-01": 9,
+    "sensor-02": 5
+  },
+  "recent_anomalies": [
+    {
+      "device_id": "sensor-01",
+      "timestamp": "2026-04-06T10:12:00Z",
+      "is_anomaly": true,
+      "score": -0.184
+    }
+  ]
+}
+```
+
+Stats are aggregated from an in-memory deque (maxlen=500). They include predictions from both the Kafka consumer path and direct REST `/predict` calls. The history resets on service restart.
+
+### Auto-retrain
+
+```http
+# Get current config
+GET http://localhost:8000/autotrain
+
+# Enable retraining every 4 hours
+POST http://localhost:8000/autotrain
+Content-Type: application/json
+
+{"enabled": true, "interval_hours": 4.0}
+```
+
+A daemon background thread checks every 60 seconds. It triggers a full retrain when `enabled=true` and the configured interval has elapsed since the last training run. After retraining, the model is reloaded in-process — no restart needed.
 
 ---
 

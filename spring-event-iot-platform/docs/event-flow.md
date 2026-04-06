@@ -26,7 +26,7 @@ The `spring-event-iot-platform` is built on a robust event-driven architecture u
 ### 2. `ProcessedTelemetryEvent`
 - **Topic**: `device-data-processed`
 - **Producer**: Processing Service
-- **Consumers**: Alert Service
+- **Consumers**: Alert Service, Analytics Service, ML Platform
 - **Purpose**: Enriched telemetry event that includes metadata and a calculated status.
 - **Example Payload**:
   ```json
@@ -65,14 +65,23 @@ The `spring-event-iot-platform` is built on a robust event-driven architecture u
 1.  **Device / Simulator**: Sends a POST request to the Gateway with JSON telemetry.
 2.  **Ingestion Service**: Converts the JSON to a `DeviceTelemetryEvent` and publishes it to `device-data-received`.
 3.  **Processing Service**:
-    -   Consumes the event.
-    -   Calls Device Service (via Feign) to validate the `deviceId` and get metadata.
-    -   Enriches the event.
-    -   If temperature > 40°C, sets status to `CRITICAL`.
-    -   Publishes to `device-data-processed`.
-4.  **Analytics Service**: Consumes from `device-data-received` in parallel to the Processing Service and increments the event counter for that device in Redis.
+    -   Consumes the event from `device-data-received`.
+    -   Calls Device Service (via Feign/Eureka) to validate the `deviceId` and get metadata.
+    -   Enriches the event with `deviceType`.
+    -   Evaluates the configurable temperature threshold (default 100°C, stored in PostgreSQL):
+        -   `temp > threshold` → status `CRITICAL`
+        -   `temp > threshold * 0.8` → status `WARNING`
+        -   Otherwise → status `NORMAL`
+    -   Idempotency check: skips duplicate event IDs.
+    -   Publishes `ProcessedTelemetryEvent` to `device-data-processed`.
+4.  **Analytics Service**: Consumes from `device-data-received` in parallel. For each event:
+    -   Increments the event counter in Redis (`analytics:event-count:{deviceId}`).
+    -   Updates last-seen timestamp (`analytics:last-seen:{deviceId}`).
+    -   Pushes a telemetry snapshot to a Redis ring-buffer (`analytics:history:{deviceId}`, capped at 50).
 5.  **Alert Service**:
     -   Consumes from `device-data-processed`.
-    -   If status is `CRITICAL`, saves an `Alert` entity to its database.
+    -   If status is `CRITICAL` → creates a HIGH severity `Alert` entity in PostgreSQL.
+    -   If status is `WARNING` → creates a MEDIUM severity `Alert` entity.
     -   Publishes an `AlertCreatedEvent` to `alert-created`.
-6.  **Notification Service**: Consumes from `alert-created` and logs a "Notification Sent" message (simulated).
+6.  **ML Platform** (Python): Consumes from `device-data-processed`, scores each event with the Isolation Forest model, and publishes predictions to `ml-predictions` / `ml-anomalies`.
+7.  **Notification Service**: Consumes from `alert-created` and delivers notifications (simulated).

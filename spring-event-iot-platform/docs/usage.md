@@ -56,18 +56,37 @@ Telemetry data is the lifeblood of the platform.
 
 The Analytics Service provides aggregated stats retrieved directly from Redis.
 
-### Get Event Count for a Device
+### Get Event Count and Last Seen for a Device
 - **Endpoint**: `GET /api/v1/analytics/stats/{deviceId}`
 - **Example (cURL)**:
     ```bash
-    curl http://localhost:8080/api/v1/analytics/stats/sensor-123
+    curl -H "Authorization: Bearer $TOKEN" \
+         http://localhost:8080/api/v1/analytics/stats/sensor-123
     ```
 - **Response**:
     ```json
     {
       "deviceId": "sensor-123",
-      "eventCount": 42
+      "eventCount": 42,
+      "lastSeen": 1743850000000
     }
+    ```
+
+`lastSeen` is epoch milliseconds. Null if no telemetry received. The frontend uses a 2-minute window to derive the Online/Offline badge.
+
+### Get Telemetry History for a Device
+- **Endpoint**: `GET /api/v1/analytics/history/{deviceId}`
+- **Example (cURL)**:
+    ```bash
+    curl -H "Authorization: Bearer $TOKEN" \
+         http://localhost:8080/api/v1/analytics/history/sensor-123
+    ```
+- **Response** (newest first, max 50 entries):
+    ```json
+    [
+      {"ts": 1743850000000, "temperature": 24.5, "humidity": 52.0, "vibration": 0.12},
+      {"ts": 1743849940000, "temperature": 23.8, "humidity": 51.5, "vibration": 0.10}
+    ]
     ```
 
 ## 4. Anomaly Detection and Alerts (alert-service)
