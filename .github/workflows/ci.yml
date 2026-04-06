@@ -148,19 +148,14 @@ jobs:
           pytest tests/ --cov=. --cov-report=xml:coverage.xml \
             --cov-config=.coveragerc || true
 
-      - name: Build Java & generate JaCoCo reports
-        run: |
-          cd spring-event-iot-platform
-          mvn verify -T 2 --batch-mode -q
-
-      - name: SonarCloud Scan
+      - name: Build Java, run tests & SonarCloud analysis
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cd spring-event-iot-platform
-          mvn sonar:sonar \
-            --batch-mode \
+          mvn verify sonar:sonar \
+            -T 2 --batch-mode \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.organization=francisco-b-o \
             -Dsonar.projectKey=Francisco-B-O_iot-streaming-ml-platform \
