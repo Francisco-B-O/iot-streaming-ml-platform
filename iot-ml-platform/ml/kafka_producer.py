@@ -5,7 +5,7 @@ Sends anomaly alerts and predictions back to Kafka topics.
 
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
 from confluent_kafka import Producer, KafkaError, Message
 
@@ -35,10 +35,10 @@ class KafkaProducer:
             logger.error(f"Failed to initialize Kafka producer: {e}")
             raise
 
-    def delivery_report(self, err: Optional[KafkaError], msg: Message):
+    def delivery_report(self, err: KafkaError | None, msg: Message):
         """
         Callback called once for each message delivered to indicate delivery result.
-        
+
         Args:
             err (Optional[KafkaError]): Delivery error, if any.
             msg (Message): The delivered message.
@@ -48,10 +48,10 @@ class KafkaProducer:
         else:
             logger.debug(f"Message delivered to {msg.topic()} [{msg.partition()}]")
 
-    def produce_anomaly(self, event_data: Dict[str, Any], is_anomaly: bool, score: float):
+    def produce_anomaly(self, event_data: dict[str, Any], is_anomaly: bool, score: float):
         """
         Produces an anomaly event to Kafka if detected.
-        
+
         Args:
             event_data (Dict[str, Any]): The telemetry event data.
             is_anomaly (bool): Whether an anomaly was detected.
@@ -69,7 +69,7 @@ class KafkaProducer:
                 "type": "ML_ANOMALY_DETECTED",
                 "source": "iot-ml-platform"
             }
-            
+
             self.producer.produce(
                 settings.KAFKA_PRODUCE_ML_ANOMALIES_TOPIC,
                 key=anomaly_event["deviceId"],
@@ -80,7 +80,7 @@ class KafkaProducer:
         except Exception as e:
             logger.error(f"Error producing anomaly event: {e}", exc_info=True)
 
-    def produce_prediction(self, event_data: Dict[str, Any], is_anomaly: bool, score: float):
+    def produce_prediction(self, event_data: dict[str, Any], is_anomaly: bool, score: float):
         """
         Produces all ML predictions to Kafka.
 

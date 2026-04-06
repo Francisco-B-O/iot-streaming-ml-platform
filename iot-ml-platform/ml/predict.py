@@ -22,7 +22,7 @@ FIX — windowed inference:
 import os
 import logging
 import json
-from typing import Dict, Tuple, Optional, List, Any
+from typing import Any
 
 import joblib
 import pandas as pd
@@ -60,12 +60,12 @@ class AnomalyPredictor:
     time sequence rather than a degenerate single-row window.
     """
 
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(self, model_path: str | None = None):
         self.model_path = model_path or settings.MODEL_STORAGE_PATH
         self.latest_info_file = os.path.join(self.model_path, "latest_model.json")
         self.model = None
-        self.feature_names: Optional[List[str]] = None
-        self.current_version: Optional[str] = None
+        self.feature_names: list[str] | None = None
+        self.current_version: str | None = None
         # Default fallback — overridden by model metadata when available
         self.threshold: float = settings.ANOMALY_THRESHOLD
         self.load_model()
@@ -74,7 +74,7 @@ class AnomalyPredictor:
         """Load the latest trained model and its computed threshold."""
         try:
             if os.path.exists(self.latest_info_file):
-                with open(self.latest_info_file, "r") as f:
+                with open(self.latest_info_file) as f:
                     latest_info = json.load(f)
 
                 version = latest_info["latest_version"]
@@ -113,7 +113,7 @@ class AnomalyPredictor:
     # ------------------------------------------------------------------
 
     def _build_inference_window(
-        self, event_data: Dict[str, Any]
+        self, event_data: dict[str, Any]
     ) -> pd.DataFrame:
         """
         Build a chronologically ordered window of events for feature computation.
@@ -150,7 +150,7 @@ class AnomalyPredictor:
         window = pd.concat([historical_filtered, current_df], ignore_index=True)
         return window
 
-    def _score_last_row(self, processed_df: pd.DataFrame) -> Tuple[bool, float]:
+    def _score_last_row(self, processed_df: pd.DataFrame) -> tuple[bool, float]:
         """
         Extract features from the last row of a processed dataframe and score it.
 
@@ -174,7 +174,7 @@ class AnomalyPredictor:
     # Public API
     # ------------------------------------------------------------------
 
-    def predict_anomaly(self, event_data: Dict[str, Any]) -> Tuple[bool, float]:
+    def predict_anomaly(self, event_data: dict[str, Any]) -> tuple[bool, float]:
         """
         Predict whether a single event is anomalous.
 
@@ -211,8 +211,8 @@ class AnomalyPredictor:
             return False, 0.0
 
     def predict_window(
-        self, events: List[Dict[str, Any]]
-    ) -> List[Tuple[bool, float]]:
+        self, events: list[dict[str, Any]]
+    ) -> list[tuple[bool, float]]:
         """
         Predict anomaly for each event in an explicit time-ordered sequence.
 
@@ -238,7 +238,7 @@ class AnomalyPredictor:
                 return [(False, 0.0)] * len(events)
 
         device_id = events[0].get('deviceId', '')
-        results: List[Tuple[bool, float]] = []
+        results: list[tuple[bool, float]] = []
 
         # Normalize all events up front
         normalized = [_keep_ml_cols(pd.json_normalize(e)) for e in events]
@@ -267,7 +267,7 @@ class AnomalyPredictor:
                          + (batch_preceding if batch_preceding else [])
                          + [current_norm])
             elif batch_preceding:
-                parts = batch_preceding + [current_norm]
+                parts = [*batch_preceding, current_norm]
             else:
                 parts = [current_norm]
 

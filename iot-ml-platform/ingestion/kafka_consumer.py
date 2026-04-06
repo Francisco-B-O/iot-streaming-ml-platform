@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from typing import Dict, Any, Optional
+from typing import Any
 
 from confluent_kafka import Consumer, KafkaException, Message, KafkaError
 
@@ -44,7 +44,7 @@ class KafkaIngestor:
             logger.error(f"Failed to initialize Kafka consumer: {e}")
             raise
 
-    def process_event_with_ml(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
+    def process_event_with_ml(self, event_data: dict[str, Any]) -> dict[str, Any]:
         """
         Processes a single event with ML, updates data, and produces results.
 
@@ -124,7 +124,7 @@ class KafkaIngestor:
         try:
             while True:
                 try:
-                    msg: Optional[Message] = self.consumer.poll(timeout=1.0)
+                    msg: Message | None = self.consumer.poll(timeout=1.0)
                     if msg is None:
                         continue
 

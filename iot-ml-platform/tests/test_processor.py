@@ -3,7 +3,6 @@ Unit tests for the DataProcessor class.
 """
 
 import pandas as pd
-import pytest
 from processing.data_processor import DataProcessor
 
 

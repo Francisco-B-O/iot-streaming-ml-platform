@@ -8,9 +8,8 @@ import logging
 import os
 import threading
 import time
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -89,7 +88,7 @@ _consumer_thread.start()
 class PredictionRequest(BaseModel):
     device_id: str = Field(..., alias="deviceId")
     timestamp: str
-    enriched_data: Dict[str, Any] = Field(..., alias="enrichedData")
+    enriched_data: dict[str, Any] = Field(..., alias="enrichedData")
 
     class Config:
         populate_by_name = True
@@ -97,7 +96,7 @@ class PredictionRequest(BaseModel):
 
 class BatchPredictionRequest(BaseModel):
     device_id: str = Field(..., alias="deviceId")
-    events: List[Dict[str, Any]]
+    events: list[dict[str, Any]]
 
     class Config:
         populate_by_name = True
@@ -112,7 +111,7 @@ class PredictionResponse(BaseModel):
 
 class BatchPredictionResponse(BaseModel):
     device_id: str
-    results: List[PredictionResponse]
+    results: list[PredictionResponse]
 
 
 class AutoTrainRequest(BaseModel):
@@ -125,7 +124,7 @@ class AutoTrainRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
-def health_check() -> Dict[str, Any]:
+def health_check() -> dict[str, Any]:
     return {
         "status": "healthy",
         "model_version": predictor.current_version,
@@ -134,7 +133,7 @@ def health_check() -> Dict[str, Any]:
 
 
 @app.post("/predict", response_model=PredictionResponse)
-def predict(request: PredictionRequest) -> Dict[str, Any]:
+def predict(request: PredictionRequest) -> dict[str, Any]:
     """Score a single telemetry event for anomaly and record the result."""
     try:
         event_data = request.model_dump(by_alias=True)
@@ -161,11 +160,11 @@ def predict(request: PredictionRequest) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error during prediction: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error during prediction.")
+        raise HTTPException(status_code=500, detail="Internal server error during prediction.") from e
 
 
 @app.post("/predict/batch", response_model=BatchPredictionResponse)
-def predict_batch(request: BatchPredictionRequest) -> Dict[str, Any]:
+def predict_batch(request: BatchPredictionRequest) -> dict[str, Any]:
     """Score a time-ordered sequence of events for a single device."""
     try:
         if not request.events:
@@ -190,7 +189,7 @@ def predict_batch(request: BatchPredictionRequest) -> Dict[str, Any]:
 
         # Store batch results in shared history
         with shared_state.history_lock:
-            for event, (is_anom, score) in zip(request.events, results_raw):
+            for event, (is_anom, score) in zip(request.events, results_raw, strict=False):
                 shared_state.prediction_history.append({
                     "device_id":  request.device_id,
                     "timestamp":  event.get("timestamp", ""),
@@ -208,15 +207,15 @@ def predict_batch(request: BatchPredictionRequest) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error during batch prediction: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error during batch prediction.")
+        raise HTTPException(status_code=500, detail="Internal server error during batch prediction.") from e
 
 
-_stats_cache: Dict[str, Any] = {}
+_stats_cache: dict[str, Any] = {}
 _stats_cache_time: float = 0.0
 _STATS_CACHE_TTL = 60.0  # seconds
 
 @app.get("/stats")
-def get_stats() -> Dict[str, Any]:
+def get_stats() -> dict[str, Any]:
     """Data lake summary statistics (cached for 60 s to avoid full lake scan on every call)."""
     global _stats_cache, _stats_cache_time
     now = time.time()
@@ -241,7 +240,7 @@ def get_stats() -> Dict[str, Any]:
 
 
 @app.post("/train")
-def train_model() -> Dict[str, Any]:
+def train_model() -> dict[str, Any]:
     """Trigger a manual model retraining."""
     try:
         logger.info("Starting manual model retraining.")
@@ -264,11 +263,11 @@ def train_model() -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error during model training: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error during training: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error during training: {e!s}") from e
 
 
 @app.get("/anomaly-stats")
-def get_anomaly_stats() -> Dict[str, Any]:
+def get_anomaly_stats() -> dict[str, Any]:
     """
     Returns aggregated statistics from the in-memory prediction history.
     Includes total predictions, anomaly count, anomaly rate, breakdown by device,
@@ -288,7 +287,7 @@ def get_anomaly_stats() -> Dict[str, Any]:
 
     anomalies = [p for p in history if p["is_anomaly"]]
 
-    by_device: Dict[str, int] = {}
+    by_device: dict[str, int] = {}
     for p in anomalies:
         did = p["device_id"]
         by_device[did] = by_device.get(did, 0) + 1
@@ -305,7 +304,7 @@ def get_anomaly_stats() -> Dict[str, Any]:
 
 
 @app.get("/autotrain")
-def get_autotrain() -> Dict[str, Any]:
+def get_autotrain() -> dict[str, Any]:
     """Returns the current auto-retrain configuration and last train timestamp."""
     with shared_state.autotrain_lock:
         config = dict(shared_state.autotrain_config)
@@ -314,7 +313,7 @@ def get_autotrain() -> Dict[str, Any]:
 
 
 @app.post("/autotrain")
-def set_autotrain(req: AutoTrainRequest) -> Dict[str, Any]:
+def set_autotrain(req: AutoTrainRequest) -> dict[str, Any]:
     """Updates the auto-retrain schedule configuration."""
     with shared_state.autotrain_lock:
         shared_state.autotrain_config["enabled"] = req.enabled

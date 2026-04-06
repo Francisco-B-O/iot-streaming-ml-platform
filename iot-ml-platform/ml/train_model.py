@@ -7,7 +7,7 @@ import os
 import logging
 import json
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 import joblib
 import numpy as np
@@ -29,10 +29,10 @@ class ModelTrainer:
     """
     Handles training and serialization of the anomaly detection model with versioning.
     """
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(self, model_path: str | None = None):
         """
         Initializes the trainer and ensures the model storage directory exists.
-        
+
         Args:
             model_path (Optional[str]): Directory to save the trained model.
         """
@@ -46,16 +46,16 @@ class ModelTrainer:
             logger.error(f"Failed to create model storage directory: {e}")
             raise
 
-    def train_anomaly_model(self, data: Optional[pd.DataFrame] = None) -> Optional[IsolationForest]:
+    def train_anomaly_model(self, data: pd.DataFrame | None = None) -> IsolationForest | None:
         """
         Trains an Isolation Forest model for anomaly detection.
         Uses historical data from the data lake if not provided.
         Includes versioning and registry tracking.
-        
+
         Args:
-            data (Optional[pd.DataFrame]): The training data. 
+            data (Optional[pd.DataFrame]): The training data.
                                           If None, data is loaded from the data lake.
-                                          
+
         Returns:
             Optional[IsolationForest]: The trained model instance, or None if training failed.
         """
@@ -71,16 +71,16 @@ class ModelTrainer:
             if data is None or data.empty:
                 logger.error("No valid features found for training.")
                 return None
-                
+
             features = data_processor.get_features_only(data)
-            
+
             if features.empty:
                 logger.error("Feature extraction resulted in empty dataframe.")
                 return None
 
             version = datetime.now().strftime("%Y%m%d_%H%M%S")
             logger.info(f"Training model version {version} with {len(features)} samples.")
-            
+
             model = IsolationForest(
                 n_estimators=100,
                 contamination='auto',
@@ -129,19 +129,19 @@ class ModelTrainer:
             }
             with open(os.path.join(self.model_path, "latest_model.json"), "w") as f:
                 json.dump(latest_info, f, indent=4)
-            
+
             self._update_registry(version, len(features), feature_names, latest_info["metrics"])
-            
+
             logger.info(f"Model version {version} saved and set as latest.")
             return model
         except Exception as e:
             logger.error(f"Unexpected error during model training: {e}", exc_info=True)
             return None
 
-    def _update_registry(self, version: str, samples: int, features: List[str], metrics: Dict[str, Any]):
+    def _update_registry(self, version: str, samples: int, features: list[str], metrics: dict[str, Any]):
         """
         Updates the model registry with new training information.
-        
+
         Args:
             version (str): The model version identifier.
             samples (int): Number of training samples.
@@ -151,9 +151,9 @@ class ModelTrainer:
         try:
             registry = []
             if os.path.exists(self.registry_file):
-                with open(self.registry_file, "r") as f:
+                with open(self.registry_file) as f:
                     registry = json.load(f)
-            
+
             registry.append({
                 "version": version,
                 "timestamp": datetime.now().isoformat(),
@@ -162,7 +162,7 @@ class ModelTrainer:
                 "features": features,
                 "metrics": metrics
             })
-            
+
             with open(self.registry_file, "w") as f:
                 json.dump(registry, f, indent=4)
         except Exception as e:

@@ -6,7 +6,7 @@ Handles persistence and retrieval of telemetry events using Parquet files partit
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 import pandas as pd
 
@@ -23,10 +23,10 @@ class DataLake:
     """
     Manages storage and retrieval of telemetry data in a local file-based data lake.
     """
-    def __init__(self, base_path: Optional[str] = None):
+    def __init__(self, base_path: str | None = None):
         """
         Initializes the DataLake and ensures the base storage path exists.
-        
+
         Args:
             base_path (Optional[str]): Root directory for the data lake storage.
         """
@@ -39,39 +39,39 @@ class DataLake:
             logger.error(f"Failed to create data lake base directory: {e}")
             raise
 
-    def store_event(self, event_data: Dict[str, Any]) -> Optional[str]:
+    def store_event(self, event_data: dict[str, Any]) -> str | None:
         """
         Stores a single event in the data lake as a Parquet file.
         Enforces inclusion of ML fields and partitioning by date.
-        
+
         Args:
             event_data (Dict[str, Any]): The telemetry event data to store.
-            
+
         Returns:
             Optional[str]: Path to the saved Parquet file, or None if storage failed.
         """
         try:
             df = pd.json_normalize(event_data)
-            
+
             # Manually ensure ML fields are present if they exist in the dict
             for field in ['anomaly_score', 'is_anomaly']:
                 if field in event_data and field not in df.columns:
                     df[field] = event_data[field]
-                    
+
             # Add arrival timestamp
             if 'arrival_timestamp' not in df.columns:
                 df['arrival_timestamp'] = datetime.now().isoformat()
-                
+
             # Partition by day for simple data lake structure
             today = datetime.now().strftime("%Y-%m-%d")
             daily_path = os.path.join(self.base_path, f"day={today}")
-            
+
             if not os.path.exists(daily_path):
                 os.makedirs(daily_path, exist_ok=True)
-                
+
             timestamp_str = datetime.now().strftime("%H%M%S_%f")
             file_path = os.path.join(daily_path, f"event_{timestamp_str}.parquet")
-            
+
             df.to_parquet(file_path, index=False)
             logger.debug(f"Event stored at {file_path}")
             return file_path
@@ -82,10 +82,10 @@ class DataLake:
     def get_latest_data(self, limit: int = 1000) -> pd.DataFrame:
         """
         Retrieves the latest data from the data lake across all partitions.
-        
+
         Args:
             limit (int): Approximate number of records to retrieve.
-            
+
         Returns:
             pd.DataFrame: A dataframe containing the concatenated records.
         """
@@ -95,16 +95,16 @@ class DataLake:
                 for file in files:
                     if file.endswith(".parquet"):
                         all_files.append(os.path.join(root, file))
-            
+
             if not all_files:
                 logger.warning("No Parquet files found in data lake.")
                 return pd.DataFrame()
-                
+
             # Sort files by modification time descending to get newest data first
             all_files.sort(key=os.path.getmtime, reverse=True)
-            
+
             # Load newest files until we reach the approximate record limit
-            dfs: List[pd.DataFrame] = []
+            dfs: list[pd.DataFrame] = []
             total_count = 0
             for f in all_files:
                 try:
@@ -116,10 +116,10 @@ class DataLake:
                 except Exception as file_error:
                     logger.error(f"Error reading Parquet file {f}: {file_error}")
                     continue
-                    
+
             if not dfs:
                 return pd.DataFrame()
-                
+
             combined_df = pd.concat(dfs, ignore_index=True)
             logger.info(f"Retrieved {len(combined_df)} records from data lake.")
             return combined_df
@@ -156,7 +156,7 @@ class DataLake:
             # Newest files first — stop as soon as we have enough events for this device
             all_files.sort(key=os.path.getmtime, reverse=True)
 
-            device_events: List[pd.DataFrame] = []
+            device_events: list[pd.DataFrame] = []
             found = 0
             for f in all_files[:300]:  # cap scan to avoid reading entire lake on every call
                 try:
