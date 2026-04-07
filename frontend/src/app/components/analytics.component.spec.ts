@@ -9,9 +9,10 @@ const mockDevices = [
   { deviceId: 'sensor-02' },
 ];
 
+// API returns newest-first; component reverses to get chronological order
 const mockHistory = [
-  { ts: 1700000000000, temperature: 25, humidity: 60, vibration: 0.02 },
   { ts: 1700000010000, temperature: 30, humidity: 65, vibration: 0.05 },
+  { ts: 1700000000000, temperature: 25, humidity: 60, vibration: 0.02 },
 ];
 
 describe('AnalyticsComponent', () => {
@@ -48,7 +49,7 @@ describe('AnalyticsComponent', () => {
   });
 
   it('should load history and reverse for chronological order', () => {
-    // History arrives newest-first, component reverses it
+    // After reversal: oldest entry (ts=1700000000000) should be first
     expect(component.historyRaw[0].ts).toBeLessThan(component.historyRaw[1].ts);
   });
 
@@ -58,6 +59,7 @@ describe('AnalyticsComponent', () => {
     expect(component.historyData.length).toBe(1);
     expect(component.historyData[0].name).toBe('Temperature');
     expect(component.historyData[0].series.length).toBe(2);
+    // After reversal, first entry is the oldest (temperature: 25)
     expect(component.historyData[0].series[0].value).toBe(25);
   });
 
@@ -65,6 +67,7 @@ describe('AnalyticsComponent', () => {
     component.chartSensor = 'humidity';
     component.buildChart();
     expect(component.historyData[0].name).toBe('Humidity');
+    // After reversal, first entry is the oldest (humidity: 60)
     expect(component.historyData[0].series[0].value).toBe(60);
   });
 

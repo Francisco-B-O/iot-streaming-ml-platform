@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick, discardPeriodicTasks } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { DashboardComponent } from './dashboard.component';
 import { ApiService } from '../services/api.service';
@@ -114,9 +114,15 @@ describe('DashboardComponent', () => {
   });
 
   it('should auto-refresh every 15 seconds', fakeAsync(() => {
+    // Re-create component inside fakeAsync so the interval timer is tracked by tick()
+    fixture.destroy();
+    fixture = TestBed.createComponent(DashboardComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
     const callsBefore = apiSpy.getDevices.calls.count();
     tick(15000);
     expect(apiSpy.getDevices.calls.count()).toBeGreaterThan(callsBefore);
     component.ngOnDestroy();
+    discardPeriodicTasks();
   }));
 });

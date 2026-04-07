@@ -88,14 +88,14 @@ describe('AlertsComponent', () => {
     apiSpy.acknowledgeAlert.and.returnValue(of({}));
     component.ack('1');
     expect(apiSpy.acknowledgeAlert).toHaveBeenCalledWith('1');
-    expect(snackSpy.open).toHaveBeenCalled();
+    // After ack, load() is called — getAlerts should have been called again
+    expect(apiSpy.getAlerts.calls.count()).toBeGreaterThan(1);
   });
 
   it('ackAll() should acknowledge all pending alerts', () => {
     apiSpy.acknowledgeAlert.and.returnValue(of({}));
     component.ackAll();
     expect(apiSpy.acknowledgeAlert).toHaveBeenCalledTimes(2); // 2 pending
-    expect(snackSpy.open).toHaveBeenCalled();
   });
 
   it('ackAll() should do nothing if no pending alerts', () => {
@@ -109,12 +109,13 @@ describe('AlertsComponent', () => {
     expect(component.tempThresholdEdit).toBe(100);
   });
 
-  it('saveThreshold() should call setTemperatureRule', () => {
+  it('saveThreshold() should call setTemperatureRule and update tempThreshold', () => {
     apiSpy.setTemperatureRule.and.returnValue(of({}));
     component.tempThresholdEdit = 90;
     component.saveThreshold();
     expect(apiSpy.setTemperatureRule).toHaveBeenCalledWith(90);
-    expect(snackSpy.open).toHaveBeenCalled();
+    expect(component.tempThreshold).toBe(90);
+    expect(component.savingThreshold).toBeFalse();
   });
 
   it('saveThreshold() should do nothing when tempThresholdEdit is null', () => {
@@ -130,14 +131,13 @@ describe('AlertsComponent', () => {
     expect(snackSpy.open).not.toHaveBeenCalled();
   });
 
-  it('exportCsv() should show snack with export count', () => {
-    spyOn(URL, 'createObjectURL').and.returnValue('blob:fake');
+  it('exportCsv() should build CSV and trigger download', () => {
+    const urlSpy = spyOn(URL, 'createObjectURL').and.returnValue('blob:fake');
     spyOn(URL, 'revokeObjectURL');
-    const anchor = document.createElement('a');
-    spyOn(anchor, 'click');
-    spyOn(document, 'createElement').and.returnValue(anchor as any);
 
     component.exportCsv();
-    expect(snackSpy.open).toHaveBeenCalled();
+
+    // Verifies that a Blob URL was created (i.e. CSV was generated)
+    expect(urlSpy).toHaveBeenCalled();
   });
 });

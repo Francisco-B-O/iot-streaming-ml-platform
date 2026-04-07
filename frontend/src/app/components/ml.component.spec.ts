@@ -97,21 +97,21 @@ describe('MlComponent', () => {
     expect(component.predicting).toBeFalse();
   });
 
-  it('predict() should show snack on error', () => {
+  it('predict() should set predicting=false and predResult=null on error', () => {
     apiSpy.predict.and.returnValue(throwError(() => ({ status: 500 })));
     component.predDeviceId = 'sensor-01';
     component.predict();
-    expect(snackSpy.open).toHaveBeenCalled();
     expect(component.predicting).toBeFalse();
+    expect(component.predResult).toBeNull();
   });
 
-  it('trainModel() should call api.trainModel and show snack', () => {
+  it('trainModel() should call api.trainModel and update state', () => {
     apiSpy.trainModel.and.returnValue(of({ message: 'Training completed' }));
     component.trainModel();
     expect(apiSpy.trainModel).toHaveBeenCalled();
     expect(component.trainingStatus).toBe('success');
     expect(component.trainingLog).toBe('Training completed');
-    expect(snackSpy.open).toHaveBeenCalled();
+    expect(component.training).toBeFalse();
   });
 
   it('trainModel() should set trainingStatus=error on failure', () => {

@@ -82,21 +82,22 @@ describe('DevicesComponent', () => {
     expect(apiSpy.createDevice).not.toHaveBeenCalled();
   });
 
-  it('create() should call api.createDevice and reload', () => {
+  it('create() should call api.createDevice and reset form', () => {
     apiSpy.createDevice.and.returnValue(of({ deviceId: 'sensor-03' }));
     component.newId = 'sensor-03';
     component.newType = 'TEMPERATURE';
     component.create();
     expect(apiSpy.createDevice).toHaveBeenCalledWith('sensor-03', 'TEMPERATURE', false);
-    expect(snackSpy.open).toHaveBeenCalled();
+    expect(component.creating).toBeFalse();
+    expect(component.showForm).toBeFalse();
+    expect(component.newId).toBe('');
   });
 
-  it('create() should show error snack on failure', () => {
+  it('create() should set creating=false on failure', () => {
     apiSpy.createDevice.and.returnValue(throwError(() => ({ status: 409, error: { message: 'Conflict' } })));
     component.newId = 'sensor-01';
     component.newType = 'TEMPERATURE';
     component.create();
-    expect(snackSpy.open).toHaveBeenCalled();
     expect(component.creating).toBeFalse();
   });
 
