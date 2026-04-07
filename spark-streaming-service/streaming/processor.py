@@ -92,11 +92,19 @@ def _enrich_row(row: Any) -> dict[str, Any]:
     device_id    = row["deviceId"]
     enriched_raw = row["enrichedData"]
 
-    reading = {
-        "temperature": float(enriched_raw["temperature"] or 0.0),
-        "humidity":    float(enriched_raw["humidity"]    or 0.0),
-        "vibration":   float(enriched_raw["vibration"]   or 0.0),
-    }
+    if enriched_raw is None:
+        logger.warning("Null enrichedData for device %s — using zero values", device_id)
+        reading         = {"temperature": 0.0, "humidity": 0.0, "vibration": 0.0}
+        device_type     = None
+        device_location = None
+    else:
+        reading = {
+            "temperature": float(enriched_raw["temperature"] or 0.0),
+            "humidity":    float(enriched_raw["humidity"]    or 0.0),
+            "vibration":   float(enriched_raw["vibration"]   or 0.0),
+        }
+        device_type     = enriched_raw["deviceType"]
+        device_location = enriched_raw["deviceLocation"]
 
     with _state_lock:
         _state.update(device_id, reading)
@@ -111,8 +119,8 @@ def _enrich_row(row: Any) -> dict[str, Any]:
             "temperature":    reading["temperature"],
             "humidity":       reading["humidity"],
             "vibration":      reading["vibration"],
-            "deviceType":     enriched_raw["deviceType"],
-            "deviceLocation": enriched_raw["deviceLocation"],
+            "deviceType":     device_type,
+            "deviceLocation": device_location,
         },
         "sparkFeatures": spark_features,
     }
@@ -126,22 +134,28 @@ def make_batch_processor(producer_conf: dict[str, str], output_topic: str):
     """
     Returns a Spark foreachBatch function that enriches each event in the
     micro-batch with rolling window statistics and publishes to Kafka.
+    The Kafka producer is created once and reused across all micro-batches.
     """
+    producer = Producer(producer_conf)
+
     def process_batch(batch_df: DataFrame, batch_id: int) -> None:
         if batch_df.rdd.isEmpty():
             return
 
-        rows    = batch_df.collect()
-        enriched = [_enrich_row(r) for r in rows]
+        rows = batch_df.collect()
+        published = 0
+        for row in rows:
+            try:
+                event = _enrich_row(row)
+                producer.produce(output_topic, json.dumps(event).encode())
+                published += 1
+            except Exception as exc:
+                logger.error("Failed to enrich/publish row in batch %d: %s", batch_id, exc, exc_info=True)
 
-        producer = Producer(producer_conf)
-        for event in enriched:
-            producer.produce(output_topic, json.dumps(event).encode())
         producer.flush()
-
         logger.info(
-            "Batch %d: published %d enriched events → %s",
-            batch_id, len(enriched), output_topic,
+            "Batch %d: published %d/%d enriched events → %s",
+            batch_id, published, len(rows), output_topic,
         )
 
     return process_batch

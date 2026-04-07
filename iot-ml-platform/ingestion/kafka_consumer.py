@@ -68,11 +68,21 @@ class KafkaIngestor:
             # Produce prediction back to Kafka
             ml_producer.produce_prediction(event_data, is_anomaly, score)
 
+            # Normalise timestamp to ISO string for /anomaly-stats display
+            raw_ts = event_data.get("timestamp", "")
+            try:
+                ts_num = float(raw_ts)
+                unit = "ms" if ts_num > 1e11 else "s"
+                import pandas as pd
+                iso_ts = pd.Timestamp(ts_num, unit=unit, tz="UTC").isoformat()
+            except (TypeError, ValueError):
+                iso_ts = str(raw_ts)
+
             # Append to shared prediction history (read by /anomaly-stats API)
             with shared_state.history_lock:
                 shared_state.prediction_history.append({
                     "device_id": event_data.get("deviceId", "unknown"),
-                    "timestamp": event_data.get("timestamp", ""),
+                    "timestamp": iso_ts,
                     "is_anomaly": is_anomaly,
                     "score":      score,
                     "severity":   prediction.get("severity", "NORMAL"),
@@ -130,8 +140,7 @@ class KafkaIngestor:
         # Subscribe with retry logic
         self.subscribe_with_retry()
 
-        error_count = 0
-        max_consecutive_errors = 10
+        topic_unavailable_count = 0
 
         try:
             while True:
@@ -142,25 +151,25 @@ class KafkaIngestor:
 
                     if msg.error():
                         error_code = msg.error().code()
-                        logger.error(f"Kafka error: {msg.error()}")
 
-                        # Handle partition EOF gracefully
+                        # Handle partition EOF gracefully (not a real error)
                         if error_code == KafkaError._PARTITION_EOF:
                             continue
-                        # Handle unknown topic with backoff
+                        # Topic not yet created — keep retrying indefinitely with backoff
                         elif error_code in [KafkaError.UNKNOWN_TOPIC_OR_PART, KafkaError.COORDINATOR_NOT_AVAILABLE]:
-                            error_count += 1
-                            if error_count < max_consecutive_errors:
-                                logger.warning(f"Topic not available, retrying... ({error_count}/{max_consecutive_errors})")
-                                time.sleep(2)
-                                continue
-                            else:
-                                raise KafkaException(msg.error())
+                            topic_unavailable_count += 1
+                            if topic_unavailable_count % 10 == 1:
+                                logger.warning(
+                                    "Topic not available yet, waiting... (%d retries so far): %s",
+                                    topic_unavailable_count, msg.error(),
+                                )
+                            time.sleep(2)
+                            continue
                         else:
                             raise KafkaException(msg.error())
 
-                    # Reset error count on successful message
-                    error_count = 0
+                    # Reset topic-unavailable counter on successful message
+                    topic_unavailable_count = 0
 
                     try:
                         if msg.value() is None:
@@ -182,11 +191,8 @@ class KafkaIngestor:
 
                 except KafkaException as e:
                     logger.error(f"Kafka exception in consumer loop: {e}")
-                    # Attempt to recover by sleeping and retrying
                     logger.info("Attempting recovery after Kafka exception...")
                     time.sleep(5)
-                    if error_count >= max_consecutive_errors:
-                        raise
 
         except Exception as e:
             logger.critical(f"Fatal error in consumer loop: {e}", exc_info=True)
