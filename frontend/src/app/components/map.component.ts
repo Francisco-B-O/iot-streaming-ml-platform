@@ -462,7 +462,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private readonly markerMap  = new Map<string, L.CircleMarker>();
   private readonly tempCache  = new Map<string, number | null>();
   // Area layer map for edit support (areaId → L.Polygon)
-  private readonly areaLayerMap = new Map<string, L.Polygon>();
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
@@ -515,21 +514,20 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       this.cdr.markForCheck();
     });
 
-    // Existing polygon edited — persist each changed area to backend
+    // Existing polygon edited — batch all updates then reload once
     this.map.on('draw:edited', (e: any) => {
-      const layers = e.layers;
-      layers.eachLayer((layer: any) => {
+      const updates: ReturnType<ApiService['updateAreaPolygon']>[] = [];
+      e.layers.eachLayer((layer: any) => {
         const areaId = layer.areaId as string | undefined;
         if (!areaId) return;
         const area = this.areas.find(a => a.id === areaId);
         if (!area) return;
         const newCoords = (layer.getLatLngs()[0] as L.LatLng[]).map(ll => [ll.lat, ll.lng]);
-        this.api.updateAreaPolygon(areaId, area.name, newCoords)
-          .pipe(catchError(() => of(null)))
-          .subscribe(updated => {
-            if (updated) this.loadData();
-          });
+        updates.push(this.api.updateAreaPolygon(areaId, area.name, newCoords).pipe(catchError(() => of(null))));
       });
+      if (updates.length > 0) {
+        forkJoin(updates).subscribe(() => this.loadData());
+      }
     });
   }
 
@@ -601,7 +599,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private renderAreas(): void {
     this.areaGroup.clearLayers();
     this.drawnItems.clearLayers();
-    this.areaLayerMap.clear();
     if (!this.showAreas) return;
 
     const anomalyDeviceIds = new Set(this.devices.filter(d => d.isAnomaly).map(d => d.deviceId));
@@ -632,7 +629,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       // Add to both the visible group and drawnItems (so Leaflet.draw can edit it)
       poly.addTo(this.areaGroup);
       this.drawnItems.addLayer(poly);
-      this.areaLayerMap.set(area.id, poly);
     });
   }
 
