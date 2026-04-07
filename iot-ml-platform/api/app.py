@@ -107,6 +107,10 @@ class PredictionResponse(BaseModel):
     anomaly_score: float
     prediction: str
     threshold: float
+    # Ensemble fields
+    severity: str = "NORMAL"
+    scores: dict[str, Any] = Field(default_factory=dict)
+    reason: str = ""
 
 
 class BatchPredictionResponse(BaseModel):
@@ -137,7 +141,10 @@ def predict(request: PredictionRequest) -> dict[str, Any]:
     """Score a single telemetry event for anomaly and record the result."""
     try:
         event_data = request.model_dump(by_alias=True)
-        is_anomaly, score = predictor.predict_anomaly(event_data)
+        prediction = predictor.predict_anomaly(event_data)
+
+        is_anomaly = prediction["is_anomaly"]
+        score      = prediction["anomaly_score"]
 
         # Store in shared prediction history
         with shared_state.history_lock:
@@ -146,17 +153,22 @@ def predict(request: PredictionRequest) -> dict[str, Any]:
                 "timestamp":  request.timestamp,
                 "is_anomaly": is_anomaly,
                 "score":      round(score, 4),
+                "severity":   prediction.get("severity", "NORMAL"),
+                "reason":     prediction.get("reason",   ""),
             })
 
         logger.info(
-            f"Prediction for {request.device_id}: "
-            f"is_anomaly={is_anomaly}, score={score:.4f}"
+            "Prediction for %s: is_anomaly=%s score=%.4f severity=%s",
+            request.device_id, is_anomaly, score, prediction.get("severity"),
         )
         return {
-            "is_anomaly": is_anomaly,
+            "is_anomaly":   is_anomaly,
             "anomaly_score": score,
-            "prediction": "ANOMALY" if is_anomaly else "NORMAL",
-            "threshold": predictor.threshold,
+            "prediction":   "ANOMALY" if is_anomaly else "NORMAL",
+            "threshold":    predictor.threshold,
+            "severity":     prediction.get("severity", "NORMAL"),
+            "scores":       prediction.get("scores",   {}),
+            "reason":       prediction.get("reason",   ""),
         }
     except Exception as e:
         logger.error(f"Error during prediction: {e}", exc_info=True)
@@ -179,28 +191,33 @@ def predict_batch(request: BatchPredictionRequest) -> dict[str, Any]:
         results_raw = predictor.predict_window(events)
         results = [
             {
-                "is_anomaly": is_anom,
-                "anomaly_score": score,
-                "prediction": "ANOMALY" if is_anom else "NORMAL",
-                "threshold": predictor.threshold,
+                "is_anomaly":    pred["is_anomaly"],
+                "anomaly_score": pred["anomaly_score"],
+                "prediction":    "ANOMALY" if pred["is_anomaly"] else "NORMAL",
+                "threshold":     predictor.threshold,
+                "severity":      pred.get("severity", "NORMAL"),
+                "scores":        pred.get("scores",   {}),
+                "reason":        pred.get("reason",   ""),
             }
-            for is_anom, score in results_raw
+            for pred in results_raw
         ]
 
         # Store batch results in shared history
         with shared_state.history_lock:
-            for event, (is_anom, score) in zip(request.events, results_raw, strict=False):
+            for event, pred in zip(request.events, results_raw, strict=False):
                 shared_state.prediction_history.append({
                     "device_id":  request.device_id,
                     "timestamp":  event.get("timestamp", ""),
-                    "is_anomaly": is_anom,
-                    "score":      round(score, 4),
+                    "is_anomaly": pred["is_anomaly"],
+                    "score":      round(pred["anomaly_score"], 4),
+                    "severity":   pred.get("severity", "NORMAL"),
+                    "reason":     pred.get("reason",   ""),
                 })
 
         logger.info(
-            f"Batch prediction for {request.device_id}: "
-            f"{len(results)} events, "
-            f"{sum(1 for r in results if r['is_anomaly'])} anomalies detected."
+            "Batch prediction for %s: %d events, %d anomalies detected.",
+            request.device_id, len(results),
+            sum(1 for r in results if r["is_anomaly"]),
         )
         return {"device_id": request.device_id, "results": results}
     except HTTPException:

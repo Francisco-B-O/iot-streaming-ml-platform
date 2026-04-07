@@ -49,17 +49,21 @@ class KafkaIngestor:
         Processes a single event with ML, updates data, and produces results.
 
         Args:
-            event_data (Dict[str, Any]): The raw telemetry event data.
+            event_data (Dict[str, Any]): The enriched telemetry event data
+                (from device-data-enriched, includes sparkFeatures).
 
         Returns:
-            Dict[str, Any]: The enriched event data.
+            Dict[str, Any]: The event data with ML prediction fields attached.
         """
         try:
-            is_anomaly, score = predictor.predict_anomaly(event_data)
+            prediction = predictor.predict_anomaly(event_data)
+
+            is_anomaly = prediction["is_anomaly"]
+            score      = prediction["anomaly_score"]
 
             # Enrich event data with ML results before storage
             event_data['anomaly_score'] = score
-            event_data['is_anomaly'] = is_anomaly
+            event_data['is_anomaly']    = is_anomaly
 
             # Produce prediction back to Kafka
             ml_producer.produce_prediction(event_data, is_anomaly, score)
@@ -70,14 +74,22 @@ class KafkaIngestor:
                     "device_id": event_data.get("deviceId", "unknown"),
                     "timestamp": event_data.get("timestamp", ""),
                     "is_anomaly": is_anomaly,
-                    "score": score,
+                    "score":      score,
+                    "severity":   prediction.get("severity", "NORMAL"),
+                    "reason":     prediction.get("reason",   ""),
                 })
 
             if is_anomaly:
-                logger.warning(f"ANOMALY DETECTED for device {event_data.get('deviceId')}: Score {score}")
+                logger.warning(
+                    "ANOMALY DETECTED for device %s: score=%.4f severity=%s",
+                    event_data.get("deviceId"), score, prediction.get("severity"),
+                )
                 ml_producer.produce_anomaly(event_data, is_anomaly, score)
             else:
-                logger.info(f"Normal event for device {event_data.get('deviceId')}: Score {score}")
+                logger.info(
+                    "Normal event for device %s: score=%.4f",
+                    event_data.get("deviceId"), score,
+                )
 
             return event_data
 

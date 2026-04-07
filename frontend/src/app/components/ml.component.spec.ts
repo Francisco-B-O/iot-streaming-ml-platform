@@ -88,12 +88,18 @@ describe('MlComponent', () => {
   });
 
   it('predict() should call api.predict and set predResult', () => {
-    apiSpy.predict.and.returnValue(of({ is_anomaly: true, score: -0.1 }));
+    const mockResult = {
+      is_anomaly: true, anomaly_score: -0.1, prediction: 'ANOMALY',
+      threshold: -0.05, severity: 'HIGH',
+      scores: { isolation: -0.1, zscore: 2.5, trend: false },
+      reason: 'Isolation Forest score -0.100 below threshold'
+    };
+    apiSpy.predict.and.returnValue(of(mockResult));
     apiSpy.getMlAnomalyStats.and.returnValue(of(mockAnomaly));
     component.predDeviceId = 'sensor-01';
     component.predict();
     expect(apiSpy.predict).toHaveBeenCalledWith('sensor-01', component.predTemp, component.predHumidity, component.predVibration);
-    expect(component.predResult).toEqual({ is_anomaly: true, score: -0.1 });
+    expect(component.predResult).toEqual(mockResult);
     expect(component.predicting).toBeFalse();
   });
 

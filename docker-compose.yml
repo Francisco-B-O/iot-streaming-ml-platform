@@ -331,6 +331,25 @@ services:
       - iot-network
 
   # ---------------------------------------------------------------------------
+  # BIG DATA LAYER — Spark Structured Streaming
+  # ---------------------------------------------------------------------------
+  spark-streaming-service:
+    build: ./spark-streaming-service
+    container_name: spark-streaming-service
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - INPUT_TOPIC=device-data-processed
+      - OUTPUT_TOPIC=device-data-enriched
+      - WINDOW_SIZE=20
+      - CHECKPOINT_LOCATION=/tmp/spark-checkpoint
+      - SPARK_MASTER=local[2]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - iot-network
+
+  # ---------------------------------------------------------------------------
   # PYTHON ML PLATFORM
   # ---------------------------------------------------------------------------
   iot-ml-platform:
@@ -339,7 +358,7 @@ services:
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_GROUP_ID=ml-group
-      - KAFKA_CONSUME_TOPICS=["device-data-processed"]
+      - KAFKA_CONSUME_TOPICS=["device-data-enriched"]
       - DATA_LAKE_PATH=/app/data/raw
       - PROCESSED_DATA_PATH=/app/data/processed
       - MODEL_STORAGE_PATH=/app/ml/models
@@ -352,6 +371,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      spark-streaming-service:
+        condition: service_started
     networks:
       - iot-network
 
