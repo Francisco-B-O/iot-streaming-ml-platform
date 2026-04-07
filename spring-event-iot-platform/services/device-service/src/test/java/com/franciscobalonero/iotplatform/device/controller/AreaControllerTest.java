@@ -109,6 +109,21 @@ class AreaControllerTest {
     }
 
     @Test
+    void shouldUpdateAreaPolygon() throws Exception {
+        UUID id = UUID.randomUUID();
+        AreaRequest request = new AreaRequest("Zone A", POLYGON);
+        AreaResponse response = AreaResponse.builder()
+                .id(id).name("Zone A").polygon(POLYGON).deviceCount(0).build();
+        when(areaService.updatePolygon(eq(id), any())).thenReturn(response);
+
+        mockMvc.perform(patch("/api/v1/areas/" + id + "/polygon")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Zone A"));
+    }
+
+    @Test
     void shouldRejectCreateAreaWithInvalidCoordinatePairs() throws Exception {
         // Each point must have exactly 2 elements — sending a 1-element point
         AreaRequest request = new AreaRequest("Bad Zone",

@@ -44,6 +44,16 @@ public class AreaService {
         return toResponse(areaRepository.save(area));
     }
 
+    /** Updates the polygon of an existing area. */
+    @Transactional
+    public AreaResponse updatePolygon(UUID id, AreaRequest request) {
+        log.info("Updating polygon for area {}", id);
+        Area area = areaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Area " + id + " not found"));
+        area.setPolygon(request.getPolygon());
+        return toResponse(areaRepository.save(area));
+    }
+
     /** Deletes an area by its ID. */
     @Transactional
     public void deleteArea(UUID id) {

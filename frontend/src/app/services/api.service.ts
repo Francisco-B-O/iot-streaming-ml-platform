@@ -44,6 +44,10 @@ export class ApiService {
     return this.http.delete(`${this.gw}/areas/${id}`);
   }
 
+  updateAreaPolygon(id: string, name: string, polygon: number[][]): Observable<any> {
+    return this.http.patch(`${this.gw}/areas/${id}/polygon`, { name, polygon });
+  }
+
   assignDeviceToArea(areaId: string, deviceId: string): Observable<any> {
     return this.http.post(`${this.gw}/areas/${areaId}/devices/${deviceId}`, {});
   }

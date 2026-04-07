@@ -7,7 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { forkJoin, of, catchError } from 'rxjs';
+import { forkJoin, of, catchError, switchMap } from 'rxjs';
 import * as L from 'leaflet';
 import 'leaflet-draw';
 import 'leaflet.heat';
@@ -458,8 +458,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private drawControl?: any;
   private drawnItems!: L.FeatureGroup;
 
-  // Popup template reference per device
-  private readonly markerMap = new Map<string, L.CircleMarker>();
+  // Marker map and temperature cache (lazy-loaded on popup open)
+  private readonly markerMap  = new Map<string, L.CircleMarker>();
+  private readonly tempCache  = new Map<string, number | null>();
+  // Area layer map for edit support (areaId → L.Polygon)
+  private readonly areaLayerMap = new Map<string, L.Polygon>();
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
@@ -492,24 +495,41 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private initDrawControl(): void {
     this.drawControl = new (L.Control as any).Draw({
       draw: {
-        polygon:   { shapeOptions: { color: '#6366f1', fillOpacity: 0.15 } },
-        polyline:  false,
-        rectangle: false,
-        circle:    false,
-        marker:    false,
+        polygon:      { shapeOptions: { color: '#6366f1', fillOpacity: 0.15 } },
+        polyline:     false,
+        rectangle:    false,
+        circle:       false,
+        marker:       false,
         circlemarker: false,
       },
-      edit: { featureGroup: this.drawnItems, remove: false },
+      edit: { featureGroup: this.drawnItems },
     });
 
+    // New polygon drawn
     this.map.on('draw:created', (e: any) => {
       const layer = e.layer as L.Polygon;
-      const latlngs = (layer.getLatLngs()[0] as L.LatLng[])
-        .map(ll => [ll.lat, ll.lng]);
+      const latlngs = (layer.getLatLngs()[0] as L.LatLng[]).map(ll => [ll.lat, ll.lng]);
       this.pendingPolygon = latlngs;
       this.isDrawing = false;
       this.stopDraw();
       this.cdr.markForCheck();
+    });
+
+    // Existing polygon edited — persist each changed area to backend
+    this.map.on('draw:edited', (e: any) => {
+      const layers = e.layers;
+      layers.eachLayer((layer: any) => {
+        const areaId = layer.areaId as string | undefined;
+        if (!areaId) return;
+        const area = this.areas.find(a => a.id === areaId);
+        if (!area) return;
+        const newCoords = (layer.getLatLngs()[0] as L.LatLng[]).map(ll => [ll.lat, ll.lng]);
+        this.api.updateAreaPolygon(areaId, area.name, newCoords)
+          .pipe(catchError(() => of(null)))
+          .subscribe(updated => {
+            if (updated) this.loadData();
+          });
+      });
     });
   }
 
@@ -569,6 +589,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       });
 
       marker.bindPopup(this.buildPopup(d), { maxWidth: 240 });
+
+      // Lazy-load temperature when popup opens
+      marker.on('popupopen', () => this.loadTemperature(d.deviceId));
+
       marker.addTo(this.markerGroup);
       this.markerMap.set(d.deviceId, marker);
     });
@@ -576,6 +600,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   private renderAreas(): void {
     this.areaGroup.clearLayers();
+    this.drawnItems.clearLayers();
+    this.areaLayerMap.clear();
     if (!this.showAreas) return;
 
     const anomalyDeviceIds = new Set(this.devices.filter(d => d.isAnomaly).map(d => d.deviceId));
@@ -584,21 +610,29 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       const latlngs = area.polygon.map(p => [p[0], p[1]] as [number, number]);
       if (latlngs.length < 3) return;
 
-      const isHighRisk = area.deviceIds.some(id => anomalyDeviceIds.has(id));
+      const isHighRisk = (area.deviceIds ?? []).some(id => anomalyDeviceIds.has(id));
       const color = isHighRisk ? '#ef4444' : '#6366f1';
 
-      L.polygon(latlngs, {
+      const poly = L.polygon(latlngs, {
         color,
         weight:      isHighRisk ? 2.5 : 1.5,
         fillColor:   color,
         fillOpacity: isHighRisk ? 0.14 : 0.06,
         dashArray:   isHighRisk ? undefined : '4 4',
-      })
-        .bindTooltip(
-          `${area.name}${isHighRisk ? ' ⚠ anomalies detected' : ''}`,
-          { permanent: true, direction: 'center', className: `area-label${isHighRisk ? ' area-label-risk' : ''}` }
-        )
-        .addTo(this.areaGroup);
+      });
+
+      // Tag layer with areaId so draw:edited can identify it
+      (poly as any).areaId = area.id;
+
+      poly.bindTooltip(
+        `${area.name}${isHighRisk ? ' ⚠ anomalies detected' : ''}`,
+        { permanent: true, direction: 'center', className: `area-label${isHighRisk ? ' area-label-risk' : ''}` }
+      );
+
+      // Add to both the visible group and drawnItems (so Leaflet.draw can edit it)
+      poly.addTo(this.areaGroup);
+      this.drawnItems.addLayer(poly);
+      this.areaLayerMap.set(area.id, poly);
     });
   }
 
@@ -609,9 +643,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }
     if (!this.showHeatmap) return;
 
+    // Use anomaly score as continuous intensity: anomaly devices show full score,
+    // non-anomaly devices show a faint baseline (0.15) so all GPS devices appear.
     const points: Array<[number, number, number]> = this.devices
       .filter(d => d.latitude != null && d.longitude != null)
-      .map(d => [d.latitude!, d.longitude!, d.isAnomaly ? 1.0 : 0.2]);
+      .map(d => [d.latitude!, d.longitude!, d.isAnomaly ? Math.max(0.6, d.anomalyScore ?? 0.6) : 0.15]);
 
     if (points.length === 0) return;
 
@@ -705,6 +741,27 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.api.deleteArea(id).subscribe(() => this.loadData());
   }
 
+  // ── Temperature lazy-load ─────────────────────────────────────────────────
+
+  private loadTemperature(deviceId: string): void {
+    if (this.tempCache.has(deviceId)) {
+      this.updateTempInPopup(deviceId, this.tempCache.get(deviceId) ?? null);
+      return;
+    }
+    this.api.getDeviceHistory(deviceId)
+      .pipe(catchError(() => of([])))
+      .subscribe((history: any[]) => {
+        const temp = history.length > 0 ? (history[0]?.temperature ?? null) : null;
+        this.tempCache.set(deviceId, temp);
+        this.updateTempInPopup(deviceId, temp);
+      });
+  }
+
+  private updateTempInPopup(deviceId: string, temp: number | null): void {
+    const el = document.getElementById(`pop-temp-${deviceId}`);
+    if (el) el.textContent = temp != null ? `${(temp as number).toFixed(1)} °C` : 'N/A';
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   markerColor(d: MapDevice): string {
@@ -716,16 +773,23 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private buildPopup(d: MapDevice): string {
-    const severity = d.isAnomaly ? `<span class="pop-badge anomaly">ANOMALY</span>` : `<span class="pop-badge normal">NORMAL</span>`;
-    const area = d.areaName ? `<div class="pop-row"><b>Area</b> ${d.areaName}</div>` : '';
+    const severity = d.isAnomaly
+      ? `<span class="pop-badge anomaly">ANOMALY</span>`
+      : `<span class="pop-badge normal">NORMAL</span>`;
+    const area  = d.areaName ? `<div class="pop-row"><b>Area</b> ${d.areaName}</div>` : '';
     const score = d.isAnomaly && d.anomalyScore != null
       ? `<div class="pop-row"><b>Score</b> ${(d.anomalyScore as number).toFixed(4)}</div>` : '';
+    // Temperature is fetched lazily on popupopen; the span id is used to inject the value
+    const cached = this.tempCache.has(d.deviceId)
+      ? (this.tempCache.get(d.deviceId) != null ? `${(this.tempCache.get(d.deviceId) as number).toFixed(1)} °C` : 'N/A')
+      : '…';
     return `
       <div class="iot-popup">
         <div class="pop-header">
           <span class="pop-id">${d.deviceId}</span>
           ${severity}
         </div>
+        <div class="pop-row"><b>Temp</b> <span id="pop-temp-${d.deviceId}">${cached}</span></div>
         <div class="pop-row"><b>Type</b> ${d.type}</div>
         <div class="pop-row"><b>Status</b> ${d.status}</div>
         ${area}

@@ -37,6 +37,12 @@ public class AreaController {
         return areaService.createArea(request);
     }
 
+    @PatchMapping("/{id}/polygon")
+    @Operation(summary = "Update area polygon", description = "Replaces the polygon coordinates of an existing area")
+    public AreaResponse updatePolygon(@PathVariable UUID id, @Valid @RequestBody AreaRequest request) {
+        return areaService.updatePolygon(id, request);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete area", description = "Removes a geographic area")

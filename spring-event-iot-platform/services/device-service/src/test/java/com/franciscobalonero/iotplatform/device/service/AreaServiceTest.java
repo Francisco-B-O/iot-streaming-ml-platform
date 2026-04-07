@@ -145,6 +145,33 @@ class AreaServiceTest {
     }
 
     @Test
+    void shouldUpdatePolygon() {
+        UUID id = UUID.randomUUID();
+        List<List<Double>> newPoly = List.of(List.of(41.0, -4.0), List.of(41.1, -4.0), List.of(41.1, -4.1));
+        Area area = Area.builder().id(id).name("Zone").polygon(POLYGON).devices(new ArrayList<>()).build();
+        AreaRequest request = new AreaRequest("Zone", newPoly);
+
+        when(areaRepository.findById(id)).thenReturn(Optional.of(area));
+        when(areaRepository.save(area)).thenReturn(area);
+        when(areaMapper.toResponse(area)).thenReturn(AreaResponse.builder().id(id).name("Zone").polygon(newPoly).deviceCount(0).build());
+
+        AreaResponse result = areaService.updatePolygon(id, request);
+
+        assertThat(area.getPolygon()).isEqualTo(newPoly);   // polygon mutated
+        assertThat(result.getPolygon()).isEqualTo(newPoly);
+        verify(areaRepository).save(area);
+    }
+
+    @Test
+    void shouldThrowWhenUpdatingPolygonOfNonExistentArea() {
+        UUID id = UUID.randomUUID();
+        when(areaRepository.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> areaService.updatePolygon(id, new AreaRequest("X", POLYGON)))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void shouldThrowWhenAssigningDeviceToNonExistentArea() {
         UUID areaId = UUID.randomUUID();
         when(areaRepository.findById(areaId)).thenReturn(Optional.empty());

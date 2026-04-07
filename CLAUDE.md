@@ -231,3 +231,74 @@ curl -X POST http://localhost:8000/autotrain \
 ```
 
 See `postman/` directory for a complete Postman collection with 40+ pre-built requests.
+
+## Geospatial System
+
+The platform includes a full geospatial monitoring layer using **Leaflet + OpenStreetMap** (free/OSS only).
+
+### Device GPS
+
+Devices can have `latitude` and `longitude` fields (nullable `DOUBLE PRECISION`). Set coordinates when creating or updating a device:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/devices \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceId":"sensor-01","type":"TEMPERATURE","simulated":false,"latitude":40.4168,"longitude":-3.7038}'
+```
+
+### Area Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`   | `/api/v1/areas` | List all areas with device membership |
+| `POST`  | `/api/v1/areas` | Create area `{ name, polygon: [[lat,lng],...] }` (min 3 points) |
+| `PATCH` | `/api/v1/areas/{id}/polygon` | Update polygon of existing area |
+| `DELETE`| `/api/v1/areas/{id}` | Delete area (cascades join table) |
+| `POST`  | `/api/v1/areas/{id}/devices/{deviceId}` | Assign device to area (idempotent) |
+| `GET`   | `/api/v1/devices/map` | Lightweight device list for map rendering |
+
+All area endpoints are routed through the gateway (`lb://device-service`).
+
+### Map Frontend (Angular)
+
+Navigate to **Map** in the left sidebar (icon: `map`). Features:
+
+| Feature | Description |
+|---------|-------------|
+| **Device markers** | Colored circles: green=normal, yellow=anomaly score>0.3, red=anomaly, gray=offline, blue=no GPS |
+| **Popups** | Click a marker → shows deviceId, last temperature (lazy-loaded), anomaly status, area, score |
+| **Draw areas** | Click "Draw new area" → draw polygon on map → enter name → Save |
+| **Edit areas** | Use the Leaflet.draw edit toolbar to reshape existing polygon → auto-saved via PATCH |
+| **Delete areas** | Trash icon next to area in left panel (with confirm dialog) |
+| **Heatmap** | Toggle "Temperature heatmap" — intensity driven by ML anomaly score (0.15 baseline → 1.0 anomaly) |
+| **High-risk areas** | Areas containing anomaly devices render in red with "⚠ anomalies detected" tooltip |
+| **Filters** | Filter markers by area membership or severity (normal/anomaly) |
+| **No-GPS count** | Devices without coordinates shown in stats chip (not rendered on map) |
+
+### Database Schema (V3 migration)
+
+```sql
+ALTER TABLE devices ADD COLUMN latitude  DOUBLE PRECISION;
+ALTER TABLE devices ADD COLUMN longitude DOUBLE PRECISION;
+
+CREATE TABLE areas (
+  id         UUID PRIMARY KEY,
+  name       VARCHAR(255) NOT NULL,
+  polygon    TEXT NOT NULL,   -- JSON: [[lat,lng], ...]
+  created_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE area_devices (
+  area_id   UUID NOT NULL REFERENCES areas(id) ON DELETE CASCADE,
+  device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  PRIMARY KEY (area_id, device_id)
+);
+```
+
+### Architecture Notes
+
+- **Polygon storage**: JSON text column via `PolygonConverter` (JPA `AttributeConverter`)
+- **N+1 avoidance**: `findAllWithDevices()` uses `LEFT JOIN FETCH`; `getDevicesForMap()` builds an in-memory device→area lookup in 2 queries
+- **Temperature in popups**: fetched lazily from `GET /analytics/history/{deviceId}` on first popup open, then cached in-memory
+- **Edit persistence**: `draw:edited` event sends `PATCH /api/v1/areas/{id}/polygon` per modified layer
