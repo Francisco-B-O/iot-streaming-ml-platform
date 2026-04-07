@@ -109,6 +109,17 @@ class AreaControllerTest {
     }
 
     @Test
+    void shouldRejectCreateAreaWithInvalidCoordinatePairs() throws Exception {
+        // Each point must have exactly 2 elements — sending a 1-element point
+        AreaRequest request = new AreaRequest("Bad Zone",
+                List.of(List.of(40.0), List.of(40.1, -3.0), List.of(40.2, -3.1)));
+        mockMvc.perform(post("/api/v1/areas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void shouldAssignDeviceToArea() throws Exception {
         UUID areaId = UUID.randomUUID();
         AreaResponse response = AreaResponse.builder()

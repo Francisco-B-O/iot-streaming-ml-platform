@@ -1,5 +1,6 @@
 package com.franciscobalonero.iotplatform.device.dto;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -29,4 +30,9 @@ public class AreaRequest {
     @NotNull(message = "Polygon coordinates are required")
     @Size(min = 3, message = "A polygon requires at least 3 coordinate pairs")
     private List<List<Double>> polygon;
+
+    @AssertTrue(message = "Each coordinate pair must have exactly 2 values [latitude, longitude]")
+    private boolean isPolygonCoordinatesValid() {
+        return polygon == null || polygon.stream().allMatch(p -> p != null && p.size() == 2);
+    }
 }

@@ -578,3 +578,73 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   outline: 2px solid var(--indigo);
   outline-offset: 2px;
 }
+
+/* ── 24. LEAFLET POPUP & TOOLTIP OVERRIDES ──────────────────── */
+/* These are injected as raw HTML by Leaflet outside Angular's
+   view encapsulation, so they must live in the global stylesheet. */
+
+.iot-popup {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: .82rem;
+  min-width: 180px;
+}
+
+.pop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.pop-id {
+  font-family: 'Roboto Mono', monospace;
+  font-size: .8rem;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pop-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.pop-badge.anomaly { background: #fee2e2; color: #991b1b; }
+.pop-badge.normal  { background: #d1fae5; color: #065f46; }
+
+.pop-row {
+  color: #475569;
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+.pop-row b { color: #0f172a; margin-right: 4px; }
+
+/* Leaflet area-label tooltip */
+.area-label {
+  background: rgba(255,255,255,.92) !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,.1) !important;
+  padding: 3px 10px !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: .72rem !important;
+  font-weight: 700 !important;
+  color: #6366f1 !important;
+  white-space: nowrap;
+}
+.area-label::before { display: none !important; }
+
+/* High-risk area label */
+.area-label-risk {
+  background: rgba(254,226,226,.92) !important;
+  border-color: #fca5a5 !important;
+  color: #dc2626 !important;
+}
