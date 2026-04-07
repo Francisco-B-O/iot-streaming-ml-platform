@@ -7,18 +7,18 @@ and a human-readable explanation.
 
 Weights
 -------
-    Isolation Forest  × 2   (unsupervised, learns normal patterns from history)
-    Z-score           × 1   (statistical, detects value outliers)
-    Trend             × 1   (temporal,    detects escalation patterns)
+    Isolation Forest  x 2   (unsupervised, learns normal patterns from history)
+    Z-score           x 1   (statistical, detects value outliers)
+    Trend             x 1   (temporal,    detects escalation patterns)
 
-An anomaly is declared when total weighted votes ≥ VOTE_THRESHOLD (2).
+An anomaly is declared when total weighted votes >= VOTE_THRESHOLD (2).
 
 Severity mapping (by total votes)
 ----------------------------------
-    0      → NORMAL
-    1      → LOW
-    2–3    → HIGH
-    4      → CRITICAL
+    0      -> NORMAL
+    1      -> LOW
+    2-3    -> HIGH
+    4      -> CRITICAL
 """
 from __future__ import annotations
 

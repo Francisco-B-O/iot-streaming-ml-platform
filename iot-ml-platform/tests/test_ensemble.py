@@ -3,7 +3,7 @@ Unit tests for ml.ensemble.EnsembleDecision.
 """
 import pytest
 
-from ml.ensemble import EnsembleDecision, VOTE_THRESHOLD
+from ml.ensemble import EnsembleDecision
 
 
 @pytest.fixture
@@ -119,7 +119,7 @@ class TestReason:
 
     def test_zscore_mentioned_in_reason(self, ensemble):
         r = ensemble.decide(_if(False), _zs(True, 4.5), _tr(False))
-        assert "\u03c3" in r["reason"]  # σ
+        assert "\u03c3" in r["reason"]  # sigma
 
     def test_trend_mentioned_in_reason(self, ensemble):
         r = ensemble.decide(_if(False), _zs(False), _tr(True, "increasing", 6.0, 12.0))
