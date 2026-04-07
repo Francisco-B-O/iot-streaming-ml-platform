@@ -27,6 +27,10 @@ export class ApiService {
     return this.http.patch(`${this.gw}/devices/${deviceId}/simulate`, { simulated });
   }
 
+  updateDeviceLocation(deviceId: string, latitude: number | null, longitude: number | null): Observable<any> {
+    return this.http.patch(`${this.gw}/devices/${deviceId}/location`, { latitude, longitude });
+  }
+
   // ─── Map ─────────────────────────────────────────────────────────────────────
   getDevicesForMap(): Observable<any[]> {
     return this.http.get<any[]>(`${this.gw}/devices/map`);

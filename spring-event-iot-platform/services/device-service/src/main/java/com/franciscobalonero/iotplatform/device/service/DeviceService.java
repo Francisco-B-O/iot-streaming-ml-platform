@@ -142,4 +142,14 @@ public class DeviceService {
         device.setSimulated(simulated);
         return deviceMapper.toDto(deviceRepository.save(device));
     }
+
+    @Transactional
+    public DeviceDto updateLocation(String deviceId, Double latitude, Double longitude) {
+        log.info("Updating location for device '{}': lat={}, lng={}", deviceId, latitude, longitude);
+        Device device = deviceRepository.findByDeviceId(deviceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Device with ID " + deviceId + " not found"));
+        device.setLatitude(latitude);
+        device.setLongitude(longitude);
+        return deviceMapper.toDto(deviceRepository.save(device));
+    }
 }

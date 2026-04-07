@@ -101,4 +101,11 @@ public class DeviceController {
         boolean simulated = Boolean.TRUE.equals(body.get("simulated"));
         return deviceService.setSimulated(deviceId, simulated);
     }
+
+    @PatchMapping("/{deviceId}/location")
+    @Operation(summary = "Set device GPS coordinates", description = "Updates or clears the latitude/longitude of a device")
+    public DeviceDto updateLocation(@PathVariable String deviceId,
+                                    @RequestBody Map<String, Double> body) {
+        return deviceService.updateLocation(deviceId, body.get("latitude"), body.get("longitude"));
+    }
 }
