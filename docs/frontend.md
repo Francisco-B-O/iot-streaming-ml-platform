@@ -10,6 +10,8 @@ Angular 17 dashboard at `http://localhost:4200`. Built as a single-page applicat
 | Angular Material | UI primitives (icons, spinners, snackbar, tooltip, ripple) |
 | ngx-charts | Charts (pie, bar-vertical, line) |
 | RxJS | Async data, polling intervals, forkJoin |
+| Leaflet + leaflet-draw | Interactive map, polygon drawing/editing |
+| leaflet.heat | Heatmap overlay driven by ML anomaly scores |
 
 ## Project structure
 
@@ -19,12 +21,13 @@ frontend/src/app/
 ├── components/
 │   ├── login.component.ts    # Auth page
 │   ├── dashboard.component.ts
-│   ├── devices.component.ts
+│   ├── devices.component.ts  # CRUD + GPS location picker
 │   ├── telemetry.component.ts
 │   ├── alerts.component.ts
 │   ├── analytics.component.ts
 │   ├── ml.component.ts
-│   └── health.component.ts
+│   ├── health.component.ts
+│   └── map.component.ts      # Leaflet map, area management, heatmap
 └── services/
     ├── api.service.ts        # All HTTP calls to gateway (8080) and ML API (8000)
     ├── auth.service.ts       # JWT lifecycle, localStorage, BehaviorSubject
@@ -33,7 +36,7 @@ frontend/src/app/
 
 ## Navigation model
 
-`AppComponent` maintains an `active: Section` string. Each component is conditionally rendered with `*ngIf="active === 'section'"`. There are no routes or URL changes. The 7 sections are:
+`AppComponent` maintains an `active: Section` string. Each component is conditionally rendered with `*ngIf="active === 'section'"`. There are no routes or URL changes. The 8 sections are:
 
 | Section | Icon |
 |---------|------|
@@ -44,6 +47,7 @@ frontend/src/app/
 | analytics | bar_chart |
 | ml | psychology |
 | health | monitor_heart |
+| map | map |
 
 The sidebar collapses to icon-only mode; state is persisted in `localStorage` (`iot_sidebar_col`). Dark mode is toggled via `document.body.classList.toggle('dark-mode')` and persisted in `localStorage` (`iot_dark`).
 
@@ -76,20 +80,28 @@ Key methods:
 | Method | Endpoint |
 |--------|---------|
 | `getDevices()` | GET /devices |
-| `createDevice(id, type)` | POST /devices |
+| `createDevice(id, type, simulated, lat?, lng?)` | POST /devices |
 | `deleteDevice(id)` | DELETE /devices/{id} |
+| `setSimulated(deviceId, simulated)` | PATCH /devices/{deviceId}/simulate |
+| `updateDeviceLocation(deviceId, lat, lng)` | PATCH /devices/{deviceId}/location |
+| `getDevicesForMap()` | GET /devices/map |
 | `sendTelemetry(deviceId, temp, hum, vib)` | POST /telemetry |
 | `getAlerts()` | GET /alerts |
-| `acknowledgeAlert(id)` | PATCH /alerts/{id}/acknowledge |
+| `acknowledgeAlert(id)` | PUT /alerts/{id}/acknowledge |
 | `getDeviceStats(deviceId)` | GET /analytics/stats/{deviceId} |
 | `getDeviceHistory(deviceId)` | GET /analytics/history/{deviceId} |
-| `getTemperatureThreshold()` | GET /rules/temperature |
-| `setTemperatureThreshold(value)` | POST /rules/temperature |
+| `getTemperatureRule()` | GET /rules/temperature |
+| `setTemperatureRule(threshold)` | POST /rules/temperature |
+| `getAreas()` | GET /areas |
+| `createArea(name, polygon)` | POST /areas |
+| `deleteArea(id)` | DELETE /areas/{id} |
+| `updateAreaPolygon(id, name, polygon)` | PATCH /areas/{id}/polygon |
+| `assignDeviceToArea(areaId, deviceId)` | POST /areas/{areaId}/devices/{deviceId} |
 | `getMlStats()` | GET http://…:8000/stats |
 | `getMlHealth()` | GET http://…:8000/health |
 | `getMlAnomalyStats()` | GET http://…:8000/anomaly-stats |
-| `getAutotrain()` | GET http://…:8000/autotrain |
-| `setAutotrain(enabled, hours)` | POST http://…:8000/autotrain |
+| `getAutoTrainConfig()` | GET http://…:8000/autotrain |
+| `setAutoTrainConfig(enabled, hours)` | POST http://…:8000/autotrain |
 | `predict(deviceId, temp, hum, vib)` | POST http://…:8000/predict |
 | `trainModel()` | POST http://…:8000/train |
 | `getGatewayHealth()` | GET /actuator/health (via gateway) |
@@ -116,16 +128,22 @@ Recent alerts section: last 8 alerts sorted by timestamp descending.
 
 ### DevicesComponent
 
-Displays all registered devices in a searchable table (client-side filter by deviceId, type, status). Fields: Device ID, Type, Status (ACTIVE/inactive), **Online/Offline badge**, **Last Seen** column, Registration date.
+Displays all registered devices in a searchable table (client-side filter by deviceId, type, status). Columns: Device ID, Type, Status, **Online/Offline badge**, Simulated toggle, **GPS**, **Last Seen**, Registered, Actions.
 
 **Online/Offline badge**: derived from `lastSeen` epoch ms returned by `GET /analytics/stats/{deviceId}`. A device is considered online if `lastSeen` is within the last 2 minutes; offline (or never seen) otherwise. Badge updates on each table load.
 
-**Last Seen column**: shows a human-readable relative time (e.g. "2 min ago") or "Never" if no telemetry has been received.
+**Last Seen column**: shows the timestamp of the last received telemetry or "—" if none.
 
-Register form (collapsible): Device ID (free text) + Type dropdown (TEMPERATURE / HUMIDITY / VIBRATION / MULTI_SENSOR).
+**GPS column**: shows `lat, lng` if set, or a "No GPS" badge. Two action buttons per row:
+- `add_location` / `edit_location` — opens the **location picker modal**
+- `location_off` — clears GPS with a confirmation dialog
+
+**Location picker modal**: a 320 px mini Leaflet/OpenStreetMap map. Click anywhere to place a pin; the marker is draggable for fine-tuning. Displays picked coordinates below the map. Save calls `PATCH /devices/{id}/location`. "Clear GPS" button appears when editing a device that already has coordinates.
+
+Register form (collapsible): Device ID + Type dropdown (TEMPERATURE / HUMIDITY / VIBRATION / MULTI_SENSOR) + optional **Latitude** / **Longitude** inputs with a "Pick on map" button that opens the same location picker pre-wired to write back to the form fields.
 
 Per-row actions:
-- **Send telemetry** — opens a modal with temperature/humidity/vibration sliders and numeric inputs. Includes quick presets: Normal (22°C / 55% / 0.01 m/s²), Warning (75°C / 85% / 3.5 m/s²), Critical (115°C / 95% / 8.0 m/s²). Visual feedback when temperature crosses warning (>80°C) or critical (>100°C) thresholds.
+- **Send telemetry** — opens a modal with temperature/humidity/vibration inputs. Includes quick presets: Normal (22°C / 55% / 0.01 m/s²), Warning (75°C / 85% / 3.5 m/s²), Critical (115°C / 95% / 8.0 m/s²). Visual feedback when temperature crosses warning (>80°C) or critical (>100°C) thresholds.
 - **Delete** — requires confirmation.
 
 ### TelemetryComponent
@@ -183,3 +201,39 @@ Checks 3 endpoints on init and on each "Refresh All":
 - Discovery Service: `/actuator/health`
 
 Overall status banner (all-up green / partial amber). Service cards show status, URL, last checked time. Gateway card expands to show Spring Boot actuator component breakdown. ML card shows `model_loaded` flag. Architecture flow diagram at the bottom.
+
+### MapComponent
+
+Full-screen interactive map using **Leaflet + OpenStreetMap** (free/OSS, no API key required).
+
+**Device markers** — one circle per device with GPS coordinates:
+
+| Colour | Meaning |
+|--------|---------|
+| Green | ACTIVE + no anomaly |
+| Yellow | ACTIVE + anomaly score > 0.3 |
+| Red | ACTIVE + is_anomaly |
+| Gray | Offline / INACTIVE |
+| Blue | No GPS coordinates |
+
+Devices without GPS are not rendered on the map but counted in the stats chip ("X without GPS").
+
+**Popups** — click a marker to see device ID, status, anomaly badge, area name, anomaly score. Temperature is lazy-loaded on first popup open from `GET /analytics/history/{deviceId}` and cached in-memory for the session.
+
+**Area management** (left panel + map controls):
+- Draw new polygons using the Leaflet.draw toolbar → enter a name → Save (`POST /areas`)
+- Edit existing polygons with the edit toolbar → auto-saved on confirmation (`PATCH /areas/{id}/polygon`)
+- Delete area via the trash icon in the left panel (with confirmation dialog, `DELETE /areas/{id}`)
+- Areas containing anomaly devices render in **red** with a "⚠ anomalies detected" tooltip
+
+**Heatmap** — toggle to overlay a temperature heatmap. Intensity is driven by the device's ML anomaly score (0.15 baseline, scales up to 1.0 for full anomalies).
+
+**Filters** — filter visible markers by area membership or severity (normal / anomaly).
+
+**Stats chips** — total devices, anomaly count, area count, no-GPS count (updates with active filters).
+
+**Implementation notes**:
+- Leaflet popup CSS lives in global `styles.css` (not the component stylesheet) because Leaflet injects popup HTML outside Angular's view encapsulation
+- `draw:edited` event handler identifies each edited polygon via `(layer as any).areaId` set at render time
+- Area polygons are stored as JSON text in PostgreSQL via a `PolygonConverter` JPA `AttributeConverter`
+- Temperature popup uses an `<span id="pop-temp-{deviceId}">` placeholder updated via `document.getElementById` after async fetch

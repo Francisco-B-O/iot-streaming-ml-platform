@@ -42,7 +42,10 @@ Three services use PostgreSQL (shared container, separate schemas/tables):
 
 **auth-service** — `users` table: id, username, password (BCrypt hashed), roles.
 
-**device-service** — `devices` table: id (UUID), deviceId (string, unique), type (enum), status, createdAt.
+**device-service** — three tables:
+- `devices`: id (UUID), deviceId (string, unique), type (enum), status, createdAt, **latitude** (DOUBLE PRECISION, nullable), **longitude** (DOUBLE PRECISION, nullable), simulated (boolean)
+- `areas`: id (UUID), name (VARCHAR), polygon (TEXT — JSON array of `[lat,lng]` pairs serialised by `PolygonConverter`), createdAt
+- `area_devices` (join table): area_id → areas(id) ON DELETE CASCADE, device_id → devices(id) ON DELETE CASCADE; PRIMARY KEY (area_id, device_id)
 
 **processing-service** — processed event storage.
 
@@ -86,7 +89,15 @@ The ML consumer implements retry logic: 30 subscription attempts with 2-second b
 
 ## Analytics (Redis)
 
-The `analytics-service` maintains per-device event counters in Redis. The `/api/v1/analytics/{deviceId}` endpoint returns `{ deviceId, eventCount }`. No time-windowed aggregation — counters are cumulative since service start (or Redis restart).
+The `analytics-service` maintains three Redis keys per device:
+
+| Key pattern | Type | Value |
+|-------------|------|-------|
+| `analytics:event-count:{deviceId}` | String | Cumulative telemetry event count (integer) |
+| `analytics:last-seen:{deviceId}` | String | Epoch ms of last telemetry received |
+| `analytics:history:{deviceId}` | List (max 50) | JSON snapshots `{ts, temperature, humidity, vibration}`, newest first |
+
+Counters are cumulative since service start (or Redis restart). The `lastSeen` field is used by the frontend to derive online/offline status (threshold: last seen within 2 minutes).
 
 ---
 

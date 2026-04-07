@@ -34,14 +34,15 @@ Device Simulator → API Gateway (8080) → Ingestion Service → Kafka
 
 **Frontend** (`frontend/`) — Angular 17 dashboard at port 4200 consuming the API Gateway.
 
-**Infrastructure**: Single `docker-compose.yml` at root orchestrates all 19 containers (Zookeeper, Kafka, PostgreSQL, Redis, Zipkin, Prometheus, Grafana, all services, simulator, ML platform, and frontend).
+**Infrastructure**: Single `docker-compose.yml` at root orchestrates all 20 containers (Zookeeper, Kafka, PostgreSQL, Redis, Zipkin, Prometheus, Grafana, all services, simulator, Spark Streaming, ML platform, and frontend).
 
 ### Kafka Topics
 
 | Topic | Producer | Consumers |
 |-------|----------|-----------|
 | `device-data-received` | ingestion-service | processing-service, analytics-service |
-| `device-data-processed` | processing-service | alert-service, analytics-service, ml-platform |
+| `device-data-processed` | processing-service | alert-service, analytics-service, spark-streaming-service |
+| `device-data-enriched` | spark-streaming-service | ml-platform |
 | `alert-created` | alert-service | notification-service |
 | `ml-predictions` | ml-platform | (frontend polling) |
 
@@ -191,12 +192,13 @@ Alert logic in `TelemetryListener`: `temp > threshold` → CRITICAL, `temp > thr
 | Section | Key features |
 |---------|-------------|
 | **Dashboard** | KPIs, alert severity chart, recent alerts, 15s auto-refresh |
-| **Devices** | CRUD, telemetry modal, **Online/Offline live badge** (2-min window), Last Seen column |
+| **Devices** | CRUD, telemetry modal, **Online/Offline live badge** (2-min window), Last Seen column, **GPS location picker** (mini Leaflet map, lat/lng in register form) |
 | **Telemetry** | Manual sensor input with sliders and presets |
 | **Alerts** | Severity/status filters, bulk ack, **Export CSV**, **Alert Rules panel** (threshold editor) |
 | **Analytics** | Event counts, bar chart, **Telemetry History line chart** (temp/humidity/vibration tabs) |
 | **ML Platform** | Prediction tester, **Anomaly stats KPIs**, **Recent anomalies list**, retrain, **Auto-retrain toggle** |
 | **Health** | Gateway, ML, Discovery status |
+| **Map** | Leaflet/OpenStreetMap, device markers (color-coded), draw/edit/delete areas, heatmap, filters, high-risk area highlighting |
 | **Topbar** | **Notification bell** with badge + dropdown of pending alerts |
 
 ## Testing the Full Flow
@@ -207,11 +209,11 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}' | jq -r '.token')
 
-# 2. Register a device
+# 2. Register a device (optionally with GPS coordinates)
 curl -X POST http://localhost:8080/api/v1/devices \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"sensor-01","type":"TEMPERATURE","location":"Building A"}'
+  -d '{"deviceId":"sensor-01","type":"TEMPERATURE","simulated":false,"latitude":40.4168,"longitude":-3.7038}'
 
 # 3. The device-simulator auto-starts and sends telemetry with JWT
 # Monitor data flow in Kafka, then check alerts:

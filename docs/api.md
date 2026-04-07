@@ -40,9 +40,15 @@ Content-Type: application/json
 
 ## Devices
 
-### List
+### List all
 ```http
 GET /devices
+Authorization: Bearer {token}
+```
+
+### Get by ID
+```http
+GET /devices/{deviceId}
 Authorization: Bearer {token}
 ```
 
@@ -53,35 +59,107 @@ Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "name": "Main Sensor",
+  "deviceId": "sensor-01",
   "type": "TEMPERATURE",
-  "location": "Building A"
+  "simulated": false,
+  "latitude": 40.4168,
+  "longitude": -3.7038
 }
 ```
+`latitude` and `longitude` are optional (nullable). Returns 201 with the created device. Returns 409 if `deviceId` already exists.
 
-### Get
+### Delete
 ```http
-GET /devices/{id}
+DELETE /devices/{deviceId}
 Authorization: Bearer {token}
 ```
+Returns 204 No Content.
 
-### Update
+### Toggle simulation
 ```http
-PUT /devices/{id}
+PATCH /devices/{deviceId}/simulate
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{ "simulated": true }
+```
+
+### Update GPS coordinates
+```http
+PATCH /devices/{deviceId}/location
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{ "latitude": 41.3888, "longitude": 2.1590 }
+```
+Pass `null` for both fields to clear GPS. Returns the updated device DTO.
+
+### Lightweight list for map rendering
+```http
+GET /devices/map
+Authorization: Bearer {token}
+```
+Returns a slim DTO per device: `deviceId`, `type`, `status`, `latitude`, `longitude`, `simulated`, `areaName` (null if not assigned). Avoids N+1 via a JOIN FETCH + in-memory lookup.
+
+---
+
+## Areas
+
+### List all (with device membership)
+```http
+GET /areas
+Authorization: Bearer {token}
+```
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Zone A",
+    "polygon": [[40.0, -3.0], [40.1, -3.0], [40.1, -3.1]],
+    "deviceCount": 2,
+    "deviceIds": ["sensor-01", "sensor-02"]
+  }
+]
+```
+
+### Create
+```http
+POST /areas
 Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "name": "Updated Name",
-  "status": "ACTIVE"
+  "name": "Zone A",
+  "polygon": [[40.0, -3.0], [40.1, -3.0], [40.1, -3.1]]
+}
+```
+`polygon` must have at least 3 points; each point must be exactly `[lat, lng]`. Returns 201.
+
+### Update polygon
+```http
+PATCH /areas/{id}/polygon
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "name": "Zone A",
+  "polygon": [[41.0, -4.0], [41.1, -4.0], [41.1, -4.1]]
 }
 ```
 
 ### Delete
 ```http
-DELETE /devices/{id}
+DELETE /areas/{id}
 Authorization: Bearer {token}
 ```
+Returns 204. Cascades to the `area_devices` join table.
+
+### Assign device to area (idempotent)
+```http
+POST /areas/{areaId}/devices/{deviceId}
+Authorization: Bearer {token}
+```
+Returns the updated area response. If the device is already assigned, returns 200 without duplicating.
 
 ---
 

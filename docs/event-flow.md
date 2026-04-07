@@ -16,28 +16,31 @@ Device / Dashboard
        ▼
   [Kafka: device-data-received]
        │
+       ├─────────────────────────────┐
+       ▼                             ▼
+  processing-service          analytics-service
+       │ alert rules eval           │ Redis counters + history
+       │ persists to PostgreSQL     │
+       │ publishes to Kafka         │
        ▼
-  processing-service  ──────────────────────────────────────────┐
-       │ enriches event (timestamps, validation)                │
-       │ persists to PostgreSQL                                 │
-       │ publishes to Kafka                                     │
-       ▼                                                        │
-  [Kafka: device-data-processed]                               │
-       │                                                        │
-       ├──────────────────┬───────────────────┐               │
-       ▼                  ▼                   ▼               │
-  alert-service    analytics-service    iot-ml-platform       │
-       │                  │                   │               │
-  threshold check    Redis counters     IsolationForest        │
-       │                                      │               │
-  [PostgreSQL]                    ┌───────────┴──────────┐   │
-       │                          ▼                      ▼   │
-       │                  [ml-predictions]         [ml-anomalies]
-       ▼
-  [alert-created]
+  [Kafka: device-data-processed]
        │
-       ▼
-  notification-service
+       ├──────────────────────────────────────────┐
+       ▼                                          ▼
+  alert-service                       spark-streaming-service
+       │ threshold check               rolling window features
+       │ creates alert                       (20-event window)
+       ▼                                          │
+  [PostgreSQL]                                    ▼
+       │                              [Kafka: device-data-enriched]
+       ▼                                          │
+  [alert-created]                                 ▼
+       │                                  iot-ml-platform (Python)
+       ▼                               ensemble: IF + Z-score + Trend
+  notification-service                           │
+                                     ┌───────────┴──────────┐
+                                     ▼                      ▼
+                             [ml-predictions]         [ml-anomalies]
 ```
 
 ## Step by step
@@ -57,13 +60,17 @@ The `processing-service` consumes `device-data-received`. It:
 
 ### 3. Parallel consumers of `device-data-processed`
 
-Three services consume this topic independently:
+Two services consume this topic directly:
 
 **alert-service** — applies threshold rules to the sensor values. When a reading exceeds configured limits (e.g. temperature > 100°C), it creates an alert record in PostgreSQL and publishes an `alert-created` event to Kafka.
 
-**analytics-service** — consumes `device-data-received` (in parallel with processing-service) and increments per-device event counters in Redis. These counters back the `/api/v1/analytics/{deviceId}` endpoint.
+**spark-streaming-service** (PySpark) — computes rolling window features (mean, std, min, max, range, trend, event_count) over a 20-event per-device window using `DeviceWindowState`. Publishes enriched events to `device-data-enriched`.
 
-**iot-ml-platform** (Python Kafka consumer) — runs the IsolationForest model on each event. Before scoring, it fetches the last 4 events for that device from the Parquet data lake to build a 5-event rolling window, ensuring rolling features (mean, std, delta) are non-degenerate. Publishes the prediction result to `ml-predictions`; if the score is below the anomaly threshold, also publishes to `ml-anomalies`.
+**analytics-service** — also consumes `device-data-received` (in parallel with processing-service) and stores per-device event counters, last-seen timestamps, and telemetry history rings in Redis.
+
+### 3b. ML inference from `device-data-enriched`
+
+**iot-ml-platform** (Python Kafka consumer) — receives the Spark-enriched event and runs the multi-model ensemble (Isolation Forest + Z-score + Trend). Publishes the prediction result to `ml-predictions`; if anomalous, also publishes to `ml-anomalies`.
 
 ### 4. Notifications
 
@@ -80,7 +87,8 @@ The `device-simulator` service starts automatically with the Docker Compose stac
 | Topic | Producer | Consumers |
 |-------|----------|-----------|
 | `device-data-received` | ingestion-service | processing-service, analytics-service |
-| `device-data-processed` | processing-service | alert-service, iot-ml-platform |
+| `device-data-processed` | processing-service | alert-service, spark-streaming-service |
+| `device-data-enriched` | spark-streaming-service | iot-ml-platform |
 | `alert-created` | alert-service | notification-service |
 | `ml-predictions` | iot-ml-platform | (frontend polling via ML API) |
 | `ml-anomalies` | iot-ml-platform | — |
