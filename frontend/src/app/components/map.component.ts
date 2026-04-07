@@ -118,10 +118,10 @@ interface MapArea {
           <h3 class="section-title"><mat-icon>info</mat-icon>Legend</h3>
           <div class="legend">
             <div class="legend-row"><span class="dot dot-green"></span>Active — normal</div>
-            <div class="legend-row"><span class="dot dot-yellow"></span>Active — warning</div>
+            <div class="legend-row"><span class="dot dot-yellow"></span>Active — score &gt; 0.3</div>
             <div class="legend-row"><span class="dot dot-red"></span>Active — anomaly</div>
-            <div class="legend-row"><span class="dot dot-gray"></span>Inactive</div>
-            <div class="legend-row"><span class="dot dot-blue"></span>No GPS data</div>
+            <div class="legend-row"><span class="dot dot-gray"></span>Inactive / offline</div>
+            <div class="legend-row"><span class="dot dot-blue"></span>No GPS coordinates</div>
           </div>
         </div>
 
@@ -137,6 +137,10 @@ interface MapArea {
           <div class="stat-chip">
             <span class="stat-num">{{ areas.length }}</span>
             <span class="stat-label">Areas</span>
+          </div>
+          <div class="stat-chip no-gps" *ngIf="noGpsCount > 0" matTooltip="Devices without GPS coordinates — not shown on map">
+            <span class="stat-num">{{ noGpsCount }}</span>
+            <span class="stat-label">No GPS</span>
           </div>
         </div>
 
@@ -361,6 +365,7 @@ interface MapArea {
       border: 1px solid var(--border, #e2e8f0);
     }
     .stat-chip.anomaly { background: rgba(239,68,68,.05); border-color: rgba(239,68,68,.2); }
+    .stat-chip.no-gps  { background: rgba(59,130,246,.05); border-color: rgba(59,130,246,.2); }
     .stat-num {
       font-size: 1.25rem;
       font-weight: 800;
@@ -368,6 +373,7 @@ interface MapArea {
       line-height: 1;
     }
     .stat-chip.anomaly .stat-num { color: #ef4444; }
+    .stat-chip.no-gps  .stat-num { color: #3b82f6; }
     .stat-label { font-size: .62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
 
     /* Refresh */
@@ -440,8 +446,9 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   newAreaName = '';
 
   // Computed
-  get totalDevices() { return this.devices.length; }
-  get anomalyCount() { return this.devices.filter(d => d.isAnomaly).length; }
+  get totalDevices()  { return this.devices.length; }
+  get anomalyCount()  { return this.devices.filter(d => d.isAnomaly).length; }
+  get noGpsCount()    { return this.devices.filter(d => d.latitude == null || d.longitude == null).length; }
 
   // Leaflet instances
   private map!: L.Map;
@@ -495,7 +502,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       edit: { featureGroup: this.drawnItems, remove: false },
     });
 
-    this.map.on(L.Draw.Event.CREATED, (e: any) => {
+    this.map.on('draw:created', (e: any) => {
       const layer = e.layer as L.Polygon;
       const latlngs = (layer.getLatLngs()[0] as L.LatLng[])
         .map(ll => [ll.lat, ll.lng]);
@@ -571,18 +578,26 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.areaGroup.clearLayers();
     if (!this.showAreas) return;
 
+    const anomalyDeviceIds = new Set(this.devices.filter(d => d.isAnomaly).map(d => d.deviceId));
+
     this.areas.forEach(area => {
       const latlngs = area.polygon.map(p => [p[0], p[1]] as [number, number]);
       if (latlngs.length < 3) return;
 
+      const isHighRisk = area.deviceIds.some(id => anomalyDeviceIds.has(id));
+      const color = isHighRisk ? '#ef4444' : '#6366f1';
+
       L.polygon(latlngs, {
-        color:       '#6366f1',
-        weight:      2,
-        fillColor:   '#6366f1',
-        fillOpacity: 0.08,
-        dashArray:   '4 4',
+        color,
+        weight:      isHighRisk ? 2.5 : 1.5,
+        fillColor:   color,
+        fillOpacity: isHighRisk ? 0.14 : 0.06,
+        dashArray:   isHighRisk ? undefined : '4 4',
       })
-        .bindTooltip(area.name, { permanent: true, direction: 'center', className: 'area-label' })
+        .bindTooltip(
+          `${area.name}${isHighRisk ? ' ⚠ anomalies detected' : ''}`,
+          { permanent: true, direction: 'center', className: `area-label${isHighRisk ? ' area-label-risk' : ''}` }
+        )
         .addTo(this.areaGroup);
     });
   }
@@ -692,9 +707,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private markerColor(d: MapDevice): string {
+  markerColor(d: MapDevice): string {
+    if (d.latitude == null || d.longitude == null) return '#3b82f6';
     if (d.status !== 'ACTIVE') return '#94a3b8';
-    if (d.isAnomaly)           return '#ef4444';
+    if (d.isAnomaly) return '#ef4444';
+    if ((d.anomalyScore ?? 0) > 0.3) return '#f59e0b';
     return '#22c55e';
   }
 

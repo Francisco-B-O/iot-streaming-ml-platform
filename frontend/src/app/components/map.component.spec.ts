@@ -184,6 +184,41 @@ describe('MapComponent', () => {
     expect(apiSpy.createArea).not.toHaveBeenCalled();
   }));
 
+  // ── markerColor ───────────────────────────────────────────────────────────
+
+  it('markerColor should return green for active normal device', () => {
+    const color = component.markerColor({ status: 'ACTIVE', latitude: 1, longitude: 1, isAnomaly: false, anomalyScore: 0 } as any);
+    expect(color).toBe('#22c55e');
+  });
+
+  it('markerColor should return red for anomaly device', () => {
+    const color = component.markerColor({ status: 'ACTIVE', latitude: 1, longitude: 1, isAnomaly: true, anomalyScore: 0.9 } as any);
+    expect(color).toBe('#ef4444');
+  });
+
+  it('markerColor should return yellow when anomalyScore > 0.3 but not anomaly', () => {
+    const color = component.markerColor({ status: 'ACTIVE', latitude: 1, longitude: 1, isAnomaly: false, anomalyScore: 0.5 } as any);
+    expect(color).toBe('#f59e0b');
+  });
+
+  it('markerColor should return gray for inactive device', () => {
+    const color = component.markerColor({ status: 'OFFLINE', latitude: 1, longitude: 1, isAnomaly: false, anomalyScore: 0 } as any);
+    expect(color).toBe('#94a3b8');
+  });
+
+  it('markerColor should return blue for device without GPS', () => {
+    const color = component.markerColor({ status: 'ACTIVE', latitude: null, longitude: null, isAnomaly: false, anomalyScore: 0 } as any);
+    expect(color).toBe('#3b82f6');
+  });
+
+  // ── noGpsCount getter ─────────────────────────────────────────────────────
+
+  it('noGpsCount should count devices without coordinates', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    expect(component.noGpsCount).toBe(1); // dev-3 has null lat/lng
+  }));
+
   it('should not save area when name is blank', fakeAsync(() => {
     fixture.detectChanges();
     tick();
