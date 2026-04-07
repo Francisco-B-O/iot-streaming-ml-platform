@@ -25,6 +25,19 @@ target/
 # Node / Angular
 frontend/node_modules/
 frontend/dist/
+frontend/.angular/
+frontend/coverage/
+frontend/package-lock.json
+
+# Python — coverage outputs
+.coverage
+coverage.xml
+coverage-spark.xml
+htmlcov/
+
+# Spark checkpoints
+spark-checkpoint/
+**/spark-checkpoint/
 
 # Environment files with secrets
 .env
