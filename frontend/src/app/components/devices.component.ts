@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -7,6 +7,7 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../services/api.service';
 import { catchError, forkJoin, of } from 'rxjs';
+import * as L from 'leaflet';
 
 interface Device {
   id: string;
@@ -15,11 +16,12 @@ interface Device {
   status: string;
   createdAt: string;
   simulated: boolean;
-  lastSeen?: number | null;   // epoch ms from analytics
+  lastSeen?: number | null;
   isOnline?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
-// A device is considered online if it sent telemetry in the last 2 minutes
 const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
 
 @Component({
@@ -72,6 +74,26 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
               <option value="VIBRATION">VIBRATION</option>
               <option value="MULTI_SENSOR">MULTI_SENSOR</option>
             </select>
+          </div>
+          <div class="field coord-field">
+            <label>Location (optional)</label>
+            <div class="coord-row">
+              <div class="input-wrap coord-input-wrap">
+                <mat-icon class="fi">my_location</mat-icon>
+                <input type="number" step="0.000001" [(ngModel)]="newLat" placeholder="Latitude" class="coord-input" />
+              </div>
+              <div class="input-wrap coord-input-wrap">
+                <mat-icon class="fi">my_location</mat-icon>
+                <input type="number" step="0.000001" [(ngModel)]="newLng" placeholder="Longitude" class="coord-input" />
+              </div>
+              <button class="btn-map-pick" (click)="openLocPickerForNew()" matTooltip="Pick on map" type="button">
+                <mat-icon>map</mat-icon>
+              </button>
+            </div>
+            <span class="coord-hint" *ngIf="newLat != null && newLng != null">
+              <mat-icon style="font-size:11px;width:11px;height:11px">location_on</mat-icon>
+              {{ newLat | number:'1.4-4' }}, {{ newLng | number:'1.4-4' }}
+            </span>
           </div>
           <div class="field sim-field">
             <label class="sim-label">
@@ -127,6 +149,7 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
               <th scope="col">Status</th>
               <th scope="col">Live</th>
               <th scope="col">Simulated</th>
+              <th scope="col">GPS</th>
               <th scope="col">Last Seen</th>
               <th scope="col">Registered</th>
               <th scope="col">Actions</th>
@@ -164,6 +187,23 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
                   {{ d.simulated ? 'ON' : 'OFF' }}
                 </button>
               </td>
+              <td>
+                <div class="gps-cell">
+                  <span *ngIf="d.latitude != null && d.longitude != null" class="gps-coords mono">
+                    {{ d.latitude | number:'1.3-3' }}, {{ d.longitude | number:'1.3-3' }}
+                  </span>
+                  <span *ngIf="d.latitude == null || d.longitude == null" class="gps-none">No GPS</span>
+                  <button class="gps-btn" (click)="openLocPicker(d)"
+                          [matTooltip]="(d.latitude != null ? 'Edit location' : 'Set location on map')"
+                          [attr.aria-label]="'Set GPS for ' + d.deviceId">
+                    <mat-icon>{{ d.latitude != null ? 'edit_location' : 'add_location' }}</mat-icon>
+                  </button>
+                  <button *ngIf="d.latitude != null" class="gps-btn gps-clear-btn" (click)="clearLocation(d)"
+                          matTooltip="Clear GPS" [attr.aria-label]="'Clear GPS for ' + d.deviceId">
+                    <mat-icon>location_off</mat-icon>
+                  </button>
+                </div>
+              </td>
               <td class="muted">
                 <span *ngIf="d.lastSeen" class="mono" style="font-size:.78rem">
                   {{ d.lastSeen | date:'dd/MM HH:mm:ss' }}
@@ -183,7 +223,6 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
                   </button>
                 </div>
               </td>
-
             </tr>
           </tbody>
         </table>
@@ -265,6 +304,49 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
         </div>
       </div>
     </div>
+
+    <!-- ── Location Picker Modal ─────────────────────────────── -->
+    <div class="modal-backdrop" *ngIf="locPickerOpen" (click)="closeLocPicker()"
+         role="dialog" aria-modal="true" aria-label="Set device location">
+      <div class="modal loc-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <div class="modal-icon loc-icon"><mat-icon>location_on</mat-icon></div>
+            <div>
+              <div class="modal-title">Set Device Location</div>
+              <div class="modal-subtitle">
+                {{ locDevice ? locDevice.deviceId : 'New device' }} · Click the map to place a pin
+              </div>
+            </div>
+          </div>
+          <button class="icon-btn" (click)="closeLocPicker()" aria-label="Close location picker">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <div id="loc-picker-map" class="loc-map"></div>
+
+        <div class="loc-coords" *ngIf="pickedLat != null && pickedLng != null">
+          <mat-icon>my_location</mat-icon>
+          <span class="mono">{{ pickedLat | number:'1.5-5' }}, {{ pickedLng | number:'1.5-5' }}</span>
+        </div>
+        <div class="loc-coords loc-coords-empty" *ngIf="pickedLat == null || pickedLng == null">
+          <mat-icon>touch_app</mat-icon>
+          <span>Click anywhere on the map to place a pin</span>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-ghost" (click)="closeLocPicker()">Cancel</button>
+          <button class="btn-outline loc-clear-btn" *ngIf="locDevice?.latitude != null" (click)="clearLocationFromPicker()">
+            <mat-icon>location_off</mat-icon> Clear GPS
+          </button>
+          <button class="btn-primary" (click)="confirmLocPicker()" [disabled]="pickedLat == null || savingLoc">
+            <mat-icon>{{ savingLoc ? 'hourglass_empty' : 'save' }}</mat-icon>
+            {{ savingLoc ? 'Saving…' : 'Save Location' }}
+          </button>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
     .subtitle { margin: 3px 0 0; font-size: .78rem; color: var(--text-muted); }
@@ -288,6 +370,24 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
     .register-row { display: flex; gap: .875rem; align-items: flex-end; flex-wrap: wrap; }
     .register-row .field { flex: 1; min-width: 180px; }
     .register-submit { align-self: flex-end; }
+
+    /* Coordinate fields */
+    .coord-field { min-width: 260px; }
+    .coord-row { display: flex; gap: 6px; align-items: center; }
+    .coord-input-wrap { flex: 1; }
+    .coord-input { width: 100%; }
+    .coord-hint {
+      display: flex; align-items: center; gap: 3px;
+      font-size: .7rem; color: var(--c-success); margin-top: 3px; font-family: 'Roboto Mono', monospace;
+    }
+    .btn-map-pick {
+      width: 36px; height: 36px; border: 1.5px solid var(--border); border-radius: var(--radius-md);
+      background: var(--surface-2); color: var(--indigo); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      transition: border-color var(--t-fast), background var(--t-fast);
+    }
+    .btn-map-pick:hover { border-color: var(--indigo); background: var(--indigo-light); }
+    .btn-map-pick mat-icon { font-size: 17px; width: 17px; height: 17px; }
 
     /* Search */
     .search-wrap {
@@ -318,7 +418,21 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
     .status-inactive { color: var(--text-muted); }
     .never-seen { color: var(--text-muted); }
 
-    /* Live pill (online/offline) */
+    /* GPS cell */
+    .gps-cell { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+    .gps-coords { font-size: .72rem; color: var(--text-secondary); white-space: nowrap; }
+    .gps-none { font-size: .72rem; color: var(--text-muted); font-style: italic; }
+    .gps-btn {
+      width: 24px; height: 24px; border: none; border-radius: 5px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      background: var(--indigo-light); color: var(--indigo);
+      transition: opacity var(--t-fast), transform var(--t-fast);
+    }
+    .gps-btn:hover { opacity: .8; transform: scale(1.06); }
+    .gps-btn mat-icon { font-size: 14px; width: 14px; height: 14px; }
+    .gps-clear-btn { background: var(--c-error-bg); color: #dc2626; }
+
+    /* Live pill */
     .live-pill {
       display: inline-flex; align-items: center; gap: 5px;
       font-size: .75rem; font-weight: 600;
@@ -329,9 +443,7 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
     .live-dot {
       width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0;
     }
-    .live-dot.pulse {
-      animation: pulse-dot 2s ease-in-out infinite;
-    }
+    .live-dot.pulse { animation: pulse-dot 2s ease-in-out infinite; }
     @keyframes pulse-dot {
       0%, 100% { opacity: 1; transform: scale(1); }
       50%       { opacity: .5; transform: scale(1.3); }
@@ -372,7 +484,7 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
     .action-btn.blue { background: var(--c-info-bg); color: #1d4ed8; }
     .action-btn.red  { background: var(--c-error-bg); color: #dc2626; }
 
-    /* Modal */
+    /* Modal base */
     .modal-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
       display: flex; align-items: center; justify-content: center;
@@ -396,6 +508,7 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
       background: var(--indigo-light); color: var(--indigo);
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
+    .modal-icon.loc-icon { background: rgba(16,185,129,.12); color: #059669; }
     .modal-icon mat-icon { font-size: 20px; width: 20px; height: 20px; }
     .modal-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
     .modal-subtitle { font-size: .75rem; color: var(--text-muted); margin-top: 1px; }
@@ -410,8 +523,7 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
     .modal-presets {
       display: flex; align-items: center; gap: 6px;
       background: var(--surface-2); border-radius: var(--radius-md);
-      padding: .625rem; margin-bottom: 1rem;
-      flex-wrap: wrap;
+      padding: .625rem; margin-bottom: 1rem; flex-wrap: wrap;
     }
     .preset-label { font-size: .75rem; color: var(--text-muted); margin-right: 4px; }
     .preset-btn {
@@ -452,21 +564,51 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
     .val-hint.warn { color: var(--amber); }
 
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-2); }
+
+    /* Location picker modal */
+    .loc-modal { max-width: 600px; }
+    .loc-map {
+      width: 100%; height: 320px; border-radius: var(--radius-md);
+      border: 1px solid var(--border); margin-bottom: .875rem;
+      background: #e5e7eb;
+    }
+    .loc-coords {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .8rem; color: var(--text-secondary); margin-bottom: .25rem;
+      padding: 6px 10px; background: var(--surface-2); border-radius: var(--radius-md);
+    }
+    .loc-coords mat-icon { font-size: 15px; width: 15px; height: 15px; color: #059669; flex-shrink: 0; }
+    .loc-coords-empty mat-icon { color: var(--text-muted); }
+    .loc-coords-empty { color: var(--text-muted); font-style: italic; }
+    .loc-clear-btn { color: #dc2626 !important; border-color: #dc2626 !important; }
+    .loc-clear-btn mat-icon { font-size: 15px; width: 15px; height: 15px; }
   `]
 })
-export class DevicesComponent implements OnInit {
+export class DevicesComponent implements OnInit, OnDestroy {
   devices: Device[] = []; filtered: Device[] = [];
   search = '';
   loading = false; showForm = false; creating = false;
   newId = ''; newType = 'MULTI_SENSOR'; newSimulated = false;
+  newLat: number | null = null; newLng: number | null = null;
   telDevice: Device | null = null;
   tTemp = 25.0; tHum = 60.0; tVib = 0.02;
   sending = false;
+
+  // Location picker state
+  locPickerOpen = false;
+  locDevice: Device | null = null;
+  pickingForNew = false;
+  pickedLat: number | null = null;
+  pickedLng: number | null = null;
+  savingLoc = false;
+  private locMap?: L.Map;
+  private locMarker?: L.Marker;
 
   get onlineCount() { return this.devices.filter(d => d.isOnline).length; }
 
   constructor(private api: ApiService, private snack: MatSnackBar) {}
   ngOnInit() { this.load(); }
+  ngOnDestroy() { this.destroyLocMap(); }
 
   load() {
     this.loading = true;
@@ -514,10 +656,11 @@ export class DevicesComponent implements OnInit {
   create() {
     if (!this.newId || !this.newType) return;
     this.creating = true;
-    this.api.createDevice(this.newId.trim(), this.newType, this.newSimulated).subscribe({
+    this.api.createDevice(this.newId.trim(), this.newType, this.newSimulated, this.newLat, this.newLng).subscribe({
       next: () => {
         this.snack.open(`Device "${this.newId}" registered!`, 'OK', { duration: 3000 });
         this.newId = ''; this.newType = 'MULTI_SENSOR'; this.newSimulated = false;
+        this.newLat = null; this.newLng = null;
         this.showForm = false; this.creating = false;
         this.load();
       },
@@ -570,5 +713,138 @@ export class DevicesComponent implements OnInit {
         this.sending = false;
       }
     });
+  }
+
+  // ── Location picker ──────────────────────────────────────────────────────────
+
+  openLocPicker(d: Device) {
+    this.locDevice = d;
+    this.pickingForNew = false;
+    this.pickedLat = d.latitude ?? null;
+    this.pickedLng = d.longitude ?? null;
+    this.locPickerOpen = true;
+    setTimeout(() => this.initLocMap(), 80);
+  }
+
+  openLocPickerForNew() {
+    this.locDevice = null;
+    this.pickingForNew = true;
+    this.pickedLat = this.newLat;
+    this.pickedLng = this.newLng;
+    this.locPickerOpen = true;
+    setTimeout(() => this.initLocMap(), 80);
+  }
+
+  private initLocMap() {
+    const el = document.getElementById('loc-picker-map');
+    if (!el) return;
+
+    const center: L.LatLngTuple = this.pickedLat != null && this.pickedLng != null
+      ? [this.pickedLat, this.pickedLng]
+      : [40.416775, -3.703790]; // Madrid as default center
+
+    this.locMap = L.map('loc-picker-map', { zoomControl: true }).setView(center, this.pickedLat != null ? 13 : 5);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(this.locMap);
+
+    if (this.pickedLat != null && this.pickedLng != null) {
+      this.locMarker = L.marker([this.pickedLat, this.pickedLng], { draggable: true }).addTo(this.locMap!);
+      this.locMarker.on('dragend', () => {
+        const pos = this.locMarker!.getLatLng();
+        this.pickedLat = pos.lat;
+        this.pickedLng = pos.lng;
+      });
+    }
+
+    this.locMap.on('click', (e: L.LeafletMouseEvent) => {
+      this.pickedLat = e.latlng.lat;
+      this.pickedLng = e.latlng.lng;
+      if (this.locMarker) {
+        this.locMarker.setLatLng(e.latlng);
+      } else {
+        this.locMarker = L.marker(e.latlng, { draggable: true }).addTo(this.locMap!);
+        this.locMarker.on('dragend', () => {
+          const pos = this.locMarker!.getLatLng();
+          this.pickedLat = pos.lat;
+          this.pickedLng = pos.lng;
+        });
+      }
+    });
+  }
+
+  confirmLocPicker() {
+    if (this.pickedLat == null || this.pickedLng == null) return;
+
+    if (this.pickingForNew) {
+      this.newLat = this.pickedLat;
+      this.newLng = this.pickedLng;
+      this.closeLocPicker();
+      return;
+    }
+
+    if (!this.locDevice) return;
+    this.savingLoc = true;
+    this.api.updateDeviceLocation(this.locDevice.deviceId, this.pickedLat, this.pickedLng).subscribe({
+      next: (updated: any) => {
+        const d = this.devices.find(x => x.deviceId === this.locDevice!.deviceId);
+        if (d) { d.latitude = updated.latitude; d.longitude = updated.longitude; }
+        this.applySearch();
+        this.snack.open(`Location saved for "${this.locDevice!.deviceId}"`, 'OK', { duration: 3000 });
+        this.savingLoc = false;
+        this.closeLocPicker();
+      },
+      error: (e) => {
+        this.snack.open('Error: ' + (e.error?.message || e.status), 'Close', { duration: 5000 });
+        this.savingLoc = false;
+      }
+    });
+  }
+
+  clearLocation(d: Device) {
+    if (!confirm(`Clear GPS coordinates for "${d.deviceId}"?`)) return;
+    this.api.updateDeviceLocation(d.deviceId, null, null).subscribe({
+      next: () => {
+        d.latitude = null; d.longitude = null;
+        this.applySearch();
+        this.snack.open(`GPS cleared for "${d.deviceId}"`, 'OK', { duration: 3000 });
+      },
+      error: (e) => this.snack.open('Error: ' + (e.error?.message || e.status), 'Close', { duration: 5000 })
+    });
+  }
+
+  clearLocationFromPicker() {
+    if (!this.locDevice) return;
+    if (!confirm(`Clear GPS coordinates for "${this.locDevice.deviceId}"?`)) return;
+    this.api.updateDeviceLocation(this.locDevice.deviceId, null, null).subscribe({
+      next: () => {
+        const d = this.devices.find(x => x.deviceId === this.locDevice!.deviceId);
+        if (d) { d.latitude = null; d.longitude = null; }
+        this.applySearch();
+        this.snack.open(`GPS cleared for "${this.locDevice!.deviceId}"`, 'OK', { duration: 3000 });
+        this.closeLocPicker();
+      },
+      error: (e) => this.snack.open('Error: ' + (e.error?.message || e.status), 'Close', { duration: 5000 })
+    });
+  }
+
+  closeLocPicker() {
+    this.destroyLocMap();
+    this.locPickerOpen = false;
+    this.locDevice = null;
+    this.pickingForNew = false;
+    this.pickedLat = null;
+    this.pickedLng = null;
+    this.savingLoc = false;
+  }
+
+  private destroyLocMap() {
+    if (this.locMap) {
+      this.locMap.remove();
+      this.locMap = undefined;
+      this.locMarker = undefined;
+    }
   }
 }

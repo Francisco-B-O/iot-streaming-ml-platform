@@ -15,8 +15,8 @@ export class ApiService {
     return this.http.get<any[]>(`${this.gw}/devices`);
   }
 
-  createDevice(deviceId: string, type: string, simulated = false): Observable<any> {
-    return this.http.post(`${this.gw}/devices`, { deviceId, type, simulated });
+  createDevice(deviceId: string, type: string, simulated = false, latitude?: number | null, longitude?: number | null): Observable<any> {
+    return this.http.post(`${this.gw}/devices`, { deviceId, type, simulated, latitude, longitude });
   }
 
   deleteDevice(id: string): Observable<any> {
