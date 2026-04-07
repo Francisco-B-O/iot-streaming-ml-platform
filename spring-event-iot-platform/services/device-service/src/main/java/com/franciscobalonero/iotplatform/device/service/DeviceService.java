@@ -2,8 +2,11 @@ package com.franciscobalonero.iotplatform.device.service;
 
 import com.franciscobalonero.iotplatform.device.dto.CreateDeviceRequest;
 import com.franciscobalonero.iotplatform.device.dto.DeviceDto;
+import com.franciscobalonero.iotplatform.device.dto.DeviceMapDto;
 import com.franciscobalonero.iotplatform.device.mapper.DeviceMapper;
+import com.franciscobalonero.iotplatform.device.model.Area;
 import com.franciscobalonero.iotplatform.device.model.Device;
+import com.franciscobalonero.iotplatform.device.repository.AreaRepository;
 import com.franciscobalonero.iotplatform.device.repository.DeviceRepository;
 import com.franciscobalonero.iotplatform.common.exception.ConflictException;
 import com.franciscobalonero.iotplatform.common.exception.ResourceNotFoundException;
@@ -13,7 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Service class for managing device business logic.
@@ -27,6 +33,7 @@ import java.util.Optional;
 public class DeviceService {
 
     private final DeviceRepository deviceRepository;
+    private final AreaRepository areaRepository;
     private final DeviceMapper deviceMapper;
 
     /**
@@ -83,6 +90,40 @@ public class DeviceService {
         Device device = deviceRepository.findByDeviceId(deviceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Device with ID " + deviceId + " not found"));
         deviceRepository.delete(device);
+    }
+
+    /**
+     * Returns a map-optimised list of all devices, including their GPS coordinates
+     * and the name of the area each device is assigned to (if any).
+     *
+     * @return List of {@link DeviceMapDto} — one entry per device.
+     */
+    @Transactional(readOnly = true)
+    public List<DeviceMapDto> getDevicesForMap() {
+        List<Device> devices = deviceRepository.findAll();
+
+        // Build device-UUID → area-name lookup in two queries (not N+1)
+        List<Area> areas = areaRepository.findAllWithDevices();
+        Map<UUID, String> deviceIdToAreaName = areas.stream()
+                .flatMap(area -> area.getDevices().stream()
+                        .map(device -> Map.entry(device.getId(), area.getName())))
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (first, second) -> first   // keep first area when device belongs to multiple
+                ));
+
+        return devices.stream()
+                .map(d -> DeviceMapDto.builder()
+                        .deviceId(d.getDeviceId())
+                        .type(d.getType())
+                        .status(d.getStatus())
+                        .latitude(d.getLatitude())
+                        .longitude(d.getLongitude())
+                        .simulated(d.isSimulated())
+                        .areaName(deviceIdToAreaName.get(d.getId()))
+                        .build())
+                .toList();
     }
 
     /**

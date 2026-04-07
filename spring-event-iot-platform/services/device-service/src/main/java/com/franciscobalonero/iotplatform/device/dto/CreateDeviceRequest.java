@@ -34,4 +34,10 @@ public class CreateDeviceRequest {
      * Defaults to false.
      */
     private boolean simulated;
+
+    /** Optional GPS latitude for map placement. */
+    private Double latitude;
+
+    /** Optional GPS longitude for map placement. */
+    private Double longitude;
 }

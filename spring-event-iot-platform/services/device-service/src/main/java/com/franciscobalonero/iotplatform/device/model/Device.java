@@ -43,6 +43,12 @@ public class Device {
     @Builder.Default
     private boolean simulated = false;
 
+    @Column
+    private Double latitude;
+
+    @Column
+    private Double longitude;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

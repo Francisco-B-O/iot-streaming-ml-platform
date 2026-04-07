@@ -27,6 +27,27 @@ export class ApiService {
     return this.http.patch(`${this.gw}/devices/${deviceId}/simulate`, { simulated });
   }
 
+  // ─── Map ─────────────────────────────────────────────────────────────────────
+  getDevicesForMap(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.gw}/devices/map`);
+  }
+
+  getAreas(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.gw}/areas`);
+  }
+
+  createArea(name: string, polygon: number[][]): Observable<any> {
+    return this.http.post(`${this.gw}/areas`, { name, polygon });
+  }
+
+  deleteArea(id: string): Observable<any> {
+    return this.http.delete(`${this.gw}/areas/${id}`);
+  }
+
+  assignDeviceToArea(areaId: string, deviceId: string): Observable<any> {
+    return this.http.post(`${this.gw}/areas/${areaId}/devices/${deviceId}`, {});
+  }
+
   // ─── Telemetry ───────────────────────────────────────────────────────────────
   sendTelemetry(deviceId: string, temperature: number, humidity: number, vibration: number): Observable<any> {
     return this.http.post(`${this.gw}/telemetry`, {

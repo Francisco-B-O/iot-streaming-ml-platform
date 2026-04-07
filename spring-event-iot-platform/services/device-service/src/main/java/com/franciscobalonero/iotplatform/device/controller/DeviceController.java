@@ -2,6 +2,7 @@ package com.franciscobalonero.iotplatform.device.controller;
 
 import com.franciscobalonero.iotplatform.device.dto.CreateDeviceRequest;
 import com.franciscobalonero.iotplatform.device.dto.DeviceDto;
+import com.franciscobalonero.iotplatform.device.dto.DeviceMapDto;
 import com.franciscobalonero.iotplatform.device.service.DeviceService;
 import com.franciscobalonero.iotplatform.common.exception.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +40,12 @@ public class DeviceController {
     @Operation(summary = "Get all devices", description = "Retrieves a list of all registered IoT devices")
     public List<DeviceDto> getAllDevices() {
         return deviceService.getAllDevices();
+    }
+
+    @GetMapping("/map")
+    @Operation(summary = "Get devices for map", description = "Returns lightweight device data with GPS coordinates for map rendering")
+    public List<DeviceMapDto> getDevicesForMap() {
+        return deviceService.getDevicesForMap();
     }
 
     /**

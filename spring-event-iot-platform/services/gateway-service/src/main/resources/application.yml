@@ -96,6 +96,15 @@ spring:
               args:
                 redis-rate-limiter.replenishRate: 10
                 redis-rate-limiter.burstCapacity: 20
+        - id: area-service-route
+          uri: lb://device-service
+          predicates:
+            - Path=/api/v1/areas/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
 
 eureka:
   client:

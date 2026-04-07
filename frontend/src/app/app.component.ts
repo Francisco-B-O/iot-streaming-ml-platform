@@ -11,12 +11,13 @@ import { AlertsComponent } from './components/alerts.component';
 import { AnalyticsComponent } from './components/analytics.component';
 import { MlComponent } from './components/ml.component';
 import { HealthComponent } from './components/health.component';
+import { MapComponent } from './components/map.component';
 import { LoginComponent } from './components/login.component';
 import { AuthService } from './services/auth.service';
 import { ApiService } from './services/api.service';
 import { interval, Subscription, catchError, of } from 'rxjs';
 
-type Section = 'dashboard' | 'devices' | 'telemetry' | 'alerts' | 'analytics' | 'ml' | 'health';
+type Section = 'dashboard' | 'devices' | 'telemetry' | 'alerts' | 'analytics' | 'ml' | 'health' | 'map';
 
 interface RecentAlert {
   id: string;
@@ -32,7 +33,7 @@ interface RecentAlert {
   imports: [
     CommonModule, MatIconModule, MatButtonModule, MatTooltipModule, MatRippleModule,
     DashboardComponent, DevicesComponent, TelemetryComponent,
-    AlertsComponent, AnalyticsComponent, MlComponent, HealthComponent, LoginComponent
+    AlertsComponent, AnalyticsComponent, MlComponent, HealthComponent, MapComponent, LoginComponent
   ],
   template: `
     <div *ngIf="!authService.isAuthenticated()">
@@ -202,6 +203,7 @@ interface RecentAlert {
           <app-analytics  *ngIf="active === 'analytics'"></app-analytics>
           <app-ml         *ngIf="active === 'ml'"></app-ml>
           <app-health     *ngIf="active === 'health'"></app-health>
+          <app-map        *ngIf="active === 'map'"></app-map>
         </main>
       </div>
     </div>
@@ -518,6 +520,7 @@ export class AppComponent implements OnInit, OnDestroy {
     { id: 'analytics' as Section, label: 'Analytics',   icon: 'bar_chart' },
     { id: 'ml'        as Section, label: 'ML Platform', icon: 'psychology' },
     { id: 'health'    as Section, label: 'Health',      icon: 'monitor_heart' },
+    { id: 'map'       as Section, label: 'Map',         icon: 'map' },
   ];
 
   get currentItem() { return this.navItems.find(n => n.id === this.active); }
