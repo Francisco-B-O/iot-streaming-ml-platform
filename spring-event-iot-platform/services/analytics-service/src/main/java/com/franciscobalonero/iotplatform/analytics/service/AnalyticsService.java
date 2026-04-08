@@ -2,6 +2,7 @@ package com.franciscobalonero.iotplatform.analytics.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.franciscobalonero.iotplatform.analytics.AnalyticsRedisKeys;
 import com.franciscobalonero.iotplatform.analytics.dto.AnalyticsDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,10 +27,6 @@ public class AnalyticsService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    private static final String EVENT_COUNT_KEY = "analytics:event-count:";
-    private static final String LAST_SEEN_KEY   = "analytics:last-seen:";
-    private static final String HISTORY_KEY     = "analytics:history:";
-
     private static final TypeReference<Map<String, Object>> MAP_TYPE_REF =
             new TypeReference<>() {};
 
@@ -39,8 +36,8 @@ public class AnalyticsService {
     public AnalyticsDto getDeviceStats(String deviceId) {
         log.debug("Fetching stats for device: {}", deviceId);
 
-        String countStr    = redisTemplate.opsForValue().get(EVENT_COUNT_KEY + deviceId);
-        String lastSeenStr = redisTemplate.opsForValue().get(LAST_SEEN_KEY   + deviceId);
+        String countStr    = redisTemplate.opsForValue().get(AnalyticsRedisKeys.EVENT_COUNT + deviceId);
+        String lastSeenStr = redisTemplate.opsForValue().get(AnalyticsRedisKeys.LAST_SEEN   + deviceId);
 
         long eventCount = countStr    != null ? Long.parseLong(countStr)    : 0L;
         Long lastSeen   = lastSeenStr != null ? Long.parseLong(lastSeenStr) : null;
@@ -59,7 +56,7 @@ public class AnalyticsService {
     public List<Map<String, Object>> getDeviceHistory(String deviceId) {
         log.debug("Fetching history for device: {}", deviceId);
 
-        List<String> raw = redisTemplate.opsForList().range(HISTORY_KEY + deviceId, 0, 49);
+        List<String> raw = redisTemplate.opsForList().range(AnalyticsRedisKeys.HISTORY + deviceId, 0, AnalyticsRedisKeys.HISTORY_MAX - 1);
         if (raw == null || raw.isEmpty()) return Collections.emptyList();
 
         return raw.stream()

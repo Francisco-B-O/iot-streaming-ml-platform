@@ -61,9 +61,9 @@ def _autotrain_loop():
                 if model:
                     predictor.load_model()
                     shared_state.last_train_time = time.time()
-                    logger.info(f"Auto-retrain completed. New threshold: {predictor.threshold:.4f}")
+                    logger.info("Auto-retrain completed. New threshold: %.4f", predictor.threshold)
             except Exception as e:
-                logger.error(f"Auto-retrain failed: {e}", exc_info=True)
+                logger.error("Auto-retrain failed: %s", e, exc_info=True)
 
 
 _autotrain_thread = threading.Thread(target=_autotrain_loop, daemon=True)
@@ -75,7 +75,7 @@ def _run_consumer():
         ingestor = KafkaIngestor()
         ingestor.consume_events()
     except Exception as e:
-        logger.error(f"Kafka consumer thread crashed: {e}", exc_info=True)
+        logger.error("Kafka consumer thread crashed: %s", e, exc_info=True)
 
 _consumer_thread = threading.Thread(target=_run_consumer, daemon=True)
 _consumer_thread.start()
@@ -171,7 +171,7 @@ def predict(request: PredictionRequest) -> dict[str, Any]:
             "reason":       prediction.get("reason",   ""),
         }
     except Exception as e:
-        logger.error(f"Error during prediction: {e}", exc_info=True)
+        logger.error("Error during prediction: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during prediction.") from e
 
 
@@ -223,7 +223,7 @@ def predict_batch(request: BatchPredictionRequest) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error during batch prediction: {e}", exc_info=True)
+        logger.error("Error during batch prediction: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during batch prediction.") from e
 
 
@@ -252,7 +252,7 @@ def get_stats() -> dict[str, Any]:
         _stats_cache_time = now
         return result
     except Exception as e:
-        logger.error(f"Error fetching stats: {e}", exc_info=True)
+        logger.error("Error fetching stats: %s", e, exc_info=True)
         return {"error": "Could not retrieve statistics", "total_events": 0, "devices": []}
 
 
@@ -279,7 +279,7 @@ def train_model() -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error during model training: {e}", exc_info=True)
+        logger.error("Error during model training: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error during training: {e!s}") from e
 
 
@@ -335,7 +335,7 @@ def set_autotrain(req: AutoTrainRequest) -> dict[str, Any]:
     with shared_state.autotrain_lock:
         shared_state.autotrain_config["enabled"] = req.enabled
         shared_state.autotrain_config["interval_hours"] = req.interval_hours
-    logger.info(f"Auto-retrain config updated: enabled={req.enabled}, interval={req.interval_hours}h")
+    logger.info("Auto-retrain config updated: enabled=%s, interval=%sh", req.enabled, req.interval_hours)
     return {"status": "ok", "config": dict(shared_state.autotrain_config)}
 
 

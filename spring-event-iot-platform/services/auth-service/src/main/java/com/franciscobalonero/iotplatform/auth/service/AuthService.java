@@ -12,6 +12,12 @@ import org.springframework.stereotype.Service;
 
 import java.util.Set;
 
+/**
+ * Service responsible for user authentication and registration.
+ * Creates a default {@code admin} account on first startup if none exists.
+ *
+ * @author Francisco Balonero Olivera
+ */
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -20,6 +26,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
 
+    /** Ensures a default admin user exists after the application context is ready. */
     @PostConstruct
     public void init() {
         if (userRepository.findByUsername("admin").isEmpty()) {
@@ -31,17 +38,31 @@ public class AuthService {
         }
     }
 
+    /**
+     * Authenticates a user and returns a signed JWT token.
+     *
+     * @param username The username to authenticate.
+     * @param password The plain-text password to verify.
+     * @return A JWT token string on successful authentication.
+     * @throws BadCredentialsException if the username does not exist or the password is incorrect.
+     */
     public String login(String username, String password) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
 
-        if (passwordEncoder.matches(password, user.getPassword())) {
-            return jwtUtil.generateToken(username, user.getRoles());
-        } else {
+        if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new BadCredentialsException("Invalid username or password");
         }
+        return jwtUtil.generateToken(username, user.getRoles());
     }
 
+    /**
+     * Registers a new user with the {@code ROLE_USER} role.
+     *
+     * @param username The desired username.
+     * @param password The plain-text password (will be encoded before storage).
+     * @throws ConflictException if the username is already taken.
+     */
     public void register(String username, String password) {
         if (userRepository.findByUsername(username).isPresent()) {
             throw new ConflictException("User already exists");

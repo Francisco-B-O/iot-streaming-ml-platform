@@ -18,7 +18,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.stream.Collectors;
 
 /**
  * Component responsible for simulating IoT device telemetry data.
@@ -46,7 +45,7 @@ public class TelemetrySimulator {
     @Value("${simulator.auth-password:admin123}")
     private String authPassword;
 
-    private String jwtToken;
+    private volatile String jwtToken;
 
     @EventListener(ApplicationReadyEvent.class)
     public void initializeAuth() {
@@ -102,12 +101,11 @@ public class TelemetrySimulator {
             );
 
             if (response.getBody() != null) {
-                List<String> fetched = Arrays.stream(response.getBody())
+                simulatedDevices = Arrays.stream(response.getBody())
                     .filter(d -> Boolean.TRUE.equals(d.get("simulated")))
                     .map(d -> (String) d.get("deviceId"))
-                    .collect(Collectors.toList());
-                simulatedDevices = fetched;
-                log.info("Simulator: {} simulated device(s): {}", fetched.size(), fetched);
+                    .toList();
+                log.info("Simulator: {} simulated device(s): {}", simulatedDevices.size(), simulatedDevices);
             }
         } catch (Exception e) {
             log.warn("Simulator: Failed to refresh simulated devices: {}", e.getMessage());

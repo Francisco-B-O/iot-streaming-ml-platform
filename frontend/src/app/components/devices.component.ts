@@ -150,6 +150,7 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
               <th scope="col">Live</th>
               <th scope="col">Simulated</th>
               <th scope="col">GPS</th>
+              <th scope="col">Zone</th>
               <th scope="col">Last Seen</th>
               <th scope="col">Registered</th>
               <th scope="col">Actions</th>
@@ -203,6 +204,12 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
                     <mat-icon>location_off</mat-icon>
                   </button>
                 </div>
+              </td>
+              <td>
+                <span *ngIf="deviceAreaMap.get(d.deviceId)" class="zone-badge">
+                  <mat-icon class="zone-icon">pentagon</mat-icon>{{ deviceAreaMap.get(d.deviceId) }}
+                </span>
+                <span *ngIf="!deviceAreaMap.get(d.deviceId)" class="muted">—</span>
               </td>
               <td class="muted">
                 <span *ngIf="d.lastSeen" class="mono" style="font-size:.78rem">
@@ -473,6 +480,15 @@ const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
     .sim-icon  { font-size: 16px; width: 16px; height: 16px; color: var(--indigo); }
     .sim-hint  { font-size: .72rem; color: var(--text-muted); margin-top: 2px; padding-left: 21px; }
 
+    .zone-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      background: rgba(99,102,241,.1); color: var(--indigo);
+      border-radius: var(--radius-full); padding: 2px 8px;
+      font-size: .72rem; font-weight: 600; white-space: nowrap; max-width: 140px;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .zone-icon { font-size: 11px; width: 11px; height: 11px; flex-shrink: 0; }
+
     .action-row { display: flex; gap: 6px; }
     .action-btn {
       width: 30px; height: 30px; border: none; border-radius: 7px;
@@ -588,6 +604,7 @@ export class DevicesComponent implements OnInit, OnDestroy {
   devices: Device[] = []; filtered: Device[] = [];
   search = '';
   loading = false; showForm = false; creating = false;
+  deviceAreaMap = new Map<string, string>();
   newId = ''; newType = 'MULTI_SENSOR'; newSimulated = false;
   newLat: number | null = null; newLng: number | null = null;
   telDevice: Device | null = null;
@@ -612,11 +629,25 @@ export class DevicesComponent implements OnInit, OnDestroy {
 
   load() {
     this.loading = true;
-    this.api.getDevices().pipe(catchError(() => of([]))).subscribe(devs => {
-      this.devices = devs;
+    forkJoin({
+      devices: this.api.getDevices().pipe(catchError(() => of([]))),
+      areas:   this.api.getAreas().pipe(catchError(() => of([])))
+    }).subscribe(({ devices, areas }) => {
+      this.devices = devices;
+      this.buildAreaMap(areas);
       this.applySearch();
       this.loading = false;
-      this.loadOnlineStatus(devs);
+      this.loadOnlineStatus(devices);
+    });
+  }
+
+  private buildAreaMap(areas: any[]): void {
+    this.deviceAreaMap.clear();
+    areas.forEach((a: any) => {
+      (a.deviceIds ?? []).forEach((id: string) => {
+        const existing = this.deviceAreaMap.get(id);
+        this.deviceAreaMap.set(id, existing ? `${existing}, ${a.name}` : a.name);
+      });
     });
   }
 

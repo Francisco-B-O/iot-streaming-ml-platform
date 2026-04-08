@@ -195,7 +195,7 @@ interface RecentAlert {
         </header>
 
         <!-- Content -->
-        <main class="content" role="main">
+        <main class="content" [class.map-active]="active === 'map'" role="main">
           <app-dashboard  *ngIf="active === 'dashboard'"></app-dashboard>
           <app-devices    *ngIf="active === 'devices'"></app-devices>
           <app-telemetry  *ngIf="active === 'telemetry'"></app-telemetry>
@@ -371,6 +371,7 @@ interface RecentAlert {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 1.5rem; gap: 1rem;
       transition: background var(--t-slow), border-color var(--t-slow);
+      position: relative; z-index: 50;
     }
     .hamburger {
       display: none; background: none; border: none; cursor: pointer;
@@ -428,7 +429,7 @@ interface RecentAlert {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius-xl); box-shadow: var(--shadow-xl);
       display: flex; flex-direction: column;
-      z-index: 200; overflow: hidden;
+      z-index: 9999; overflow: hidden;
       animation: notifIn .18s ease;
     }
     @keyframes notifIn { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
@@ -500,6 +501,8 @@ interface RecentAlert {
 
     /* Content */
     .content { flex: 1; overflow-y: auto; }
+    .content.map-active { overflow: hidden; }
+    app-map { display: block; height: 100%; }
   `]
 })
 export class AppComponent implements OnInit, OnDestroy {

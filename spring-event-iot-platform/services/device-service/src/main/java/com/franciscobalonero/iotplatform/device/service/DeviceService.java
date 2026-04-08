@@ -143,6 +143,16 @@ public class DeviceService {
         return deviceMapper.toDto(deviceRepository.save(device));
     }
 
+    /**
+     * Updates the GPS coordinates of a device.
+     * Pass {@code null} for both {@code latitude} and {@code longitude} to clear the location.
+     *
+     * @param deviceId  The unique identifier of the device.
+     * @param latitude  New latitude value, or {@code null} to clear.
+     * @param longitude New longitude value, or {@code null} to clear.
+     * @return The updated device DTO.
+     * @throws ResourceNotFoundException if the device is not found.
+     */
     @Transactional
     public DeviceDto updateLocation(String deviceId, Double latitude, Double longitude) {
         log.info("Updating location for device '{}': lat={}, lng={}", deviceId, latitude, longitude);

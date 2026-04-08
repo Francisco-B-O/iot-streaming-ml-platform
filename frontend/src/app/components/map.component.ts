@@ -458,9 +458,9 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private drawControl?: any;
   private drawnItems!: L.FeatureGroup;
 
-  // Marker map and temperature cache (lazy-loaded on popup open)
+  // Marker map and telemetry cache (lazy-loaded on tooltip/popup open)
   private readonly markerMap  = new Map<string, L.CircleMarker>();
-  private readonly tempCache  = new Map<string, number | null>();
+  private readonly histCache  = new Map<string, { temp: number|null; hum: number|null; vib: number|null } | null>();
   // Area layer map for edit support (areaId → L.Polygon)
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
@@ -553,7 +553,22 @@ export class MapComponent implements AfterViewInit, OnDestroy {
           .find((a: any) => a.device_id === d.deviceId)?.score ?? 0,
       }));
 
-      this.areas = areas as MapArea[];
+      // Compute area membership from GPS coordinates (point-in-polygon)
+      const rawAreas = areas as MapArea[];
+      this.areas = rawAreas.map(area => {
+        const inside = this.devices.filter(
+          d => d.latitude != null && d.longitude != null &&
+               this.pointInPolygon(d.latitude!, d.longitude!, area.polygon)
+        );
+        return { ...area, deviceIds: inside.map(d => d.deviceId), deviceCount: inside.length };
+      });
+
+      // Update each device's areaName from polygon containment
+      this.devices = this.devices.map(d => {
+        const foundArea = this.areas.find(a => a.deviceIds.includes(d.deviceId));
+        return { ...d, areaName: foundArea?.name ?? d.areaName ?? null };
+      });
+
       this.loading = false;
       this.renderMap();
       this.cdr.markForCheck();
@@ -569,6 +584,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private renderMarkers(): void {
+    if (!this.markerGroup) return;
     this.markerGroup.clearLayers();
     this.markerMap.clear();
 
@@ -586,10 +602,16 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         fillOpacity: 0.9,
       });
 
-      marker.bindPopup(this.buildPopup(d), { maxWidth: 240 });
+      marker.bindTooltip(this.buildTooltip(d), {
+        className: 'iot-tooltip',
+        sticky: false,
+        direction: 'top',
+        offset: [0, -6],
+      });
+      marker.on('tooltipopen', () => this.loadHistory(d.deviceId, 'tip'));
 
-      // Lazy-load temperature when popup opens
-      marker.on('popupopen', () => this.loadTemperature(d.deviceId));
+      marker.bindPopup(this.buildPopup(d), { maxWidth: 260 });
+      marker.on('popupopen', () => this.loadHistory(d.deviceId, 'pop'));
 
       marker.addTo(this.markerGroup);
       this.markerMap.set(d.deviceId, marker);
@@ -597,8 +619,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private renderAreas(): void {
-    this.areaGroup.clearLayers();
-    this.drawnItems.clearLayers();
+    this.areaGroup?.clearLayers();
+    this.drawnItems?.clearLayers();
     if (!this.showAreas) return;
 
     const anomalyDeviceIds = new Set(this.devices.filter(d => d.isAnomaly).map(d => d.deviceId));
@@ -693,7 +715,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     if (this.showAreas) {
       this.renderAreas();
     } else {
-      this.areaGroup.clearLayers();
+      this.areaGroup?.clearLayers();
     }
   }
 
@@ -717,7 +739,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       .subscribe(() => {
         this.pendingPolygon = null;
         this.newAreaName = '';
-        this.drawnItems.clearLayers();
+        this.drawnItems?.clearLayers();
         this.loadData();
       });
   }
@@ -725,7 +747,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   cancelArea(): void {
     this.pendingPolygon = null;
     this.newAreaName = '';
-    this.drawnItems.clearLayers();
+    this.drawnItems?.clearLayers();
     this.cdr.markForCheck();
   }
 
@@ -737,28 +759,50 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.api.deleteArea(id).subscribe(() => this.loadData());
   }
 
-  // ── Temperature lazy-load ─────────────────────────────────────────────────
+  // ── Telemetry lazy-load (tooltip + popup) ────────────────────────────────
 
-  private loadTemperature(deviceId: string): void {
-    if (this.tempCache.has(deviceId)) {
-      this.updateTempInPopup(deviceId, this.tempCache.get(deviceId) ?? null);
+  private loadHistory(deviceId: string, prefix: string): void {
+    if (this.histCache.has(deviceId)) {
+      this.applyHistToEl(deviceId, prefix, this.histCache.get(deviceId) ?? null);
       return;
     }
     this.api.getDeviceHistory(deviceId)
       .pipe(catchError(() => of([])))
       .subscribe((history: any[]) => {
-        const temp = history.length > 0 ? (history[0]?.temperature ?? null) : null;
-        this.tempCache.set(deviceId, temp);
-        this.updateTempInPopup(deviceId, temp);
+        const entry = history[0] ?? null;
+        const val = entry
+          ? { temp: entry.temperature ?? null, hum: entry.humidity ?? null, vib: entry.vibration ?? null }
+          : null;
+        this.histCache.set(deviceId, val);
+        this.applyHistToEl(deviceId, prefix, val);
       });
   }
 
-  private updateTempInPopup(deviceId: string, temp: number | null): void {
-    const el = document.getElementById(`pop-temp-${deviceId}`);
-    if (el) el.textContent = temp != null ? `${(temp as number).toFixed(1)} °C` : 'N/A';
+  private applyHistToEl(deviceId: string, prefix: string, val: { temp: number|null; hum: number|null; vib: number|null } | null): void {
+    const upd = (id: string, v: number | null, dec: number, unit: string) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = v != null ? `${v.toFixed(dec)} ${unit}` : 'N/A';
+    };
+    upd(`${prefix}-temp-${deviceId}`, val?.temp ?? null, 1, '°C');
+    upd(`${prefix}-hum-${deviceId}`,  val?.hum  ?? null, 1, '%');
+    upd(`${prefix}-vib-${deviceId}`,  val?.vib  ?? null, 3, 'm/s²');
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /** Ray-casting point-in-polygon test. polygon is [[lat,lng],...]. */
+  private pointInPolygon(lat: number, lng: number, polygon: number[][]): boolean {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const latI = polygon[i][0], lngI = polygon[i][1];
+      const latJ = polygon[j][0], lngJ = polygon[j][1];
+      if (((lngI > lng) !== (lngJ > lng)) &&
+          (lat < (latJ - latI) * (lng - lngI) / (lngJ - lngI) + latI)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
 
   markerColor(d: MapDevice): string {
     if (d.latitude == null || d.longitude == null) return '#3b82f6';
@@ -768,27 +812,41 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     return '#22c55e';
   }
 
+  private buildTooltip(d: MapDevice): string {
+    return this.buildPopupHtml(d, 'tip');
+  }
+
   private buildPopup(d: MapDevice): string {
+    return this.buildPopupHtml(d, 'pop');
+  }
+
+  private buildPopupHtml(d: MapDevice, prefix: string): string {
+    const color = d.isAnomaly ? '#ef4444' : (d.status !== 'ACTIVE' ? '#94a3b8' : ((d.anomalyScore ?? 0) > 0.3 ? '#f59e0b' : '#22c55e'));
     const severity = d.isAnomaly
       ? `<span class="pop-badge anomaly">ANOMALY</span>`
       : `<span class="pop-badge normal">NORMAL</span>`;
-    const area  = d.areaName ? `<div class="pop-row"><b>Area</b> ${d.areaName}</div>` : '';
+    const area  = d.areaName ? `<div class="pop-row"><b>Zone</b> ${d.areaName}</div>` : '';
     const score = d.isAnomaly && d.anomalyScore != null
       ? `<div class="pop-row"><b>Score</b> ${(d.anomalyScore as number).toFixed(4)}</div>` : '';
-    // Temperature is fetched lazily on popupopen; the span id is used to inject the value
-    const cached = this.tempCache.has(d.deviceId)
-      ? (this.tempCache.get(d.deviceId) != null ? `${(this.tempCache.get(d.deviceId) as number).toFixed(1)} °C` : 'N/A')
-      : '…';
+    const gps   = d.latitude != null
+      ? `<div class="pop-row"><b>GPS</b> ${d.latitude.toFixed(4)}, ${d.longitude!.toFixed(4)}</div>` : '';
+    const cached = this.histCache.has(d.deviceId) ? this.histCache.get(d.deviceId) ?? null : null;
+    const t = cached ? (cached.temp != null ? `${cached.temp.toFixed(1)} °C`   : 'N/A') : '…';
+    const h = cached ? (cached.hum  != null ? `${cached.hum.toFixed(1)} %`     : 'N/A') : '…';
+    const v = cached ? (cached.vib  != null ? `${cached.vib.toFixed(3)} m/s²`  : 'N/A') : '…';
     return `
       <div class="iot-popup">
         <div class="pop-header">
-          <span class="pop-id">${d.deviceId}</span>
+          <span class="pop-id" style="border-left:3px solid ${color};padding-left:6px">${d.deviceId}</span>
           ${severity}
         </div>
-        <div class="pop-row"><b>Temp</b> <span id="pop-temp-${d.deviceId}">${cached}</span></div>
+        <div class="pop-row"><b>Temp</b>      <span id="${prefix}-temp-${d.deviceId}">${t}</span></div>
+        <div class="pop-row"><b>Humidity</b>  <span id="${prefix}-hum-${d.deviceId}">${h}</span></div>
+        <div class="pop-row"><b>Vibration</b> <span id="${prefix}-vib-${d.deviceId}">${v}</span></div>
         <div class="pop-row"><b>Type</b> ${d.type}</div>
         <div class="pop-row"><b>Status</b> ${d.status}</div>
         ${area}
+        ${gps}
         ${score}
         <div class="pop-row"><b>Simulated</b> ${d.simulated ? 'Yes' : 'No'}</div>
       </div>`;

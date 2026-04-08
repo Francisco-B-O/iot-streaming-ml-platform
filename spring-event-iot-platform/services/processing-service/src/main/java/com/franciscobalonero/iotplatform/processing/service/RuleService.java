@@ -21,38 +21,10 @@ public class RuleService {
 
     private final RuleRepository ruleRepository;
     private static final double DEFAULT_TEMPERATURE_THRESHOLD = 100.0;
-    private volatile boolean initialized = false;
-
-    /**
-     * Lazy initialization of default rules - executes on first use of getTemperatureThreshold()
-     */
-    private void ensureInitialized() {
-        if (!initialized) {
-            synchronized (this) {
-                if (!initialized) {
-                    try {
-                        if (ruleRepository.findByMetric("temperature").isEmpty()) {
-                            Rule defaultRule = Rule.builder()
-                                    .ruleName("Default Temperature Check")
-                                    .metric("temperature")
-                                    .threshold(DEFAULT_TEMPERATURE_THRESHOLD)
-                                    .description("Default threshold for temperature anomalies")
-                                    .build();
-                            ruleRepository.save(defaultRule);
-                            log.info("Initialized default temperature rule");
-                        }
-                    } catch (Exception e) {
-                        log.warn("Error initializing default rules: {}. Using fallback threshold.", e.getMessage());
-                    } finally {
-                        initialized = true;
-                    }
-                }
-            }
-        }
-    }
 
     /**
      * Updates the current temperature threshold.
+     * Creates the rule entry if it does not exist yet.
      *
      * @param threshold The new threshold value.
      */
@@ -63,10 +35,9 @@ public class RuleService {
             Rule rule = ruleRepository.findByMetric("temperature")
                     .orElseGet(() -> Rule.builder()
                             .metric("temperature")
-                            .ruleName("Dynamic Temperature Check")
+                            .ruleName("Default Temperature Check")
                             .build());
             rule.setThreshold(threshold);
-            rule.setRuleName("Dynamic Temperature Check");
             ruleRepository.save(rule);
         } catch (Exception e) {
             log.warn("Error updating temperature threshold: {}", e.getMessage());
@@ -75,14 +46,13 @@ public class RuleService {
 
     /**
      * Retrieves the current temperature threshold.
-     * Returns the default threshold if no rule is found or if an error occurs.
-     * Lazily initializes default rules on first call.
+     * Falls back to {@value DEFAULT_TEMPERATURE_THRESHOLD} if no rule is found or an error occurs.
+     * Default rules are guaranteed to exist after {@link com.franciscobalonero.iotplatform.processing.config.RuleInitializer} runs.
      *
      * @return The temperature threshold value.
      */
     @Transactional(readOnly = true)
     public double getTemperatureThreshold() {
-        ensureInitialized();
         try {
             return ruleRepository.findByMetric("temperature")
                     .map(Rule::getThreshold)

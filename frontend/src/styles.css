@@ -627,6 +627,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .pop-row b { color: #0f172a; margin-right: 4px; }
 
+/* Device hover tooltip */
+.leaflet-tooltip.iot-tooltip {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12) !important;
+  padding: 10px 12px !important;
+  pointer-events: none;
+}
+.leaflet-tooltip.iot-tooltip::before {
+  border-top-color: #e2e8f0 !important;
+}
+
 /* Leaflet area-label tooltip */
 .area-label {
   background: rgba(255,255,255,.92) !important;

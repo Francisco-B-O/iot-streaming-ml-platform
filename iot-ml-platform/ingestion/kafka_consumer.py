@@ -9,6 +9,8 @@ import os
 import time
 from typing import Any
 
+import pandas as pd
+
 from confluent_kafka import Consumer, KafkaException, Message, KafkaError
 
 from config.settings import settings
@@ -41,7 +43,7 @@ class KafkaIngestor:
             self.consumer = Consumer(self.conf)
             self.topics = settings.KAFKA_CONSUME_TOPICS
         except Exception as e:
-            logger.error(f"Failed to initialize Kafka consumer: {e}")
+            logger.error("Failed to initialize Kafka consumer: %s", e)
             raise
 
     def process_event_with_ml(self, event_data: dict[str, Any]) -> dict[str, Any]:
@@ -73,7 +75,6 @@ class KafkaIngestor:
             try:
                 ts_num = float(raw_ts)
                 unit = "ms" if ts_num > 1e11 else "s"
-                import pandas as pd
                 iso_ts = pd.Timestamp(ts_num, unit=unit, tz="UTC").isoformat()
             except (TypeError, ValueError):
                 iso_ts = str(raw_ts)
@@ -104,7 +105,7 @@ class KafkaIngestor:
             return event_data
 
         except Exception as e:
-            logger.error(f"Error in ML processing: {e}", exc_info=True)
+            logger.error("Error in ML processing: %s", e, exc_info=True)
             # Return original data if enrichment fails to avoid data loss in lake
             return event_data
 
@@ -120,16 +121,16 @@ class KafkaIngestor:
         while retries < max_retries:
             try:
                 self.consumer.subscribe(self.topics)
-                logger.info(f"Successfully subscribed to topics: {self.topics}")
+                logger.info("Successfully subscribed to topics: %s", self.topics)
                 return
             except Exception as e:
                 retries += 1
-                logger.warning(f"Subscription attempt {retries}/{max_retries} failed: {e}")
+                logger.warning("Subscription attempt %d/%d failed: %s", retries, max_retries, e)
                 if retries < max_retries:
-                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    logger.info("Retrying in %d seconds...", retry_delay)
                     time.sleep(retry_delay)
 
-        logger.error(f"Failed to subscribe to topics after {max_retries} attempts")
+        logger.error("Failed to subscribe to topics after %d attempts", max_retries)
         raise RuntimeError(f"Unable to subscribe to Kafka topics: {self.topics}")
 
     def consume_events(self):
@@ -176,7 +177,7 @@ class KafkaIngestor:
                             continue
                         raw_value = msg.value().decode('utf-8')
                         event_data = json.loads(raw_value)
-                        logger.debug(f"Received event: {event_data.get('eventId', 'unknown')}")
+                        logger.debug("Received event: %s", event_data.get('eventId', 'unknown'))
 
                         # 1. Run ML (Real-time scoring)
                         enriched_event = self.process_event_with_ml(event_data)
@@ -185,17 +186,17 @@ class KafkaIngestor:
                         data_lake.store_event(enriched_event)
 
                     except json.JSONDecodeError as e:
-                        logger.error(f"Failed to decode message JSON: {e}")
+                        logger.error("Failed to decode message JSON: %s", e)
                     except Exception as e:
-                        logger.error(f"Error processing message: {e}", exc_info=True)
+                        logger.error("Error processing message: %s", e, exc_info=True)
 
                 except KafkaException as e:
-                    logger.error(f"Kafka exception in consumer loop: {e}")
+                    logger.error("Kafka exception in consumer loop: %s", e)
                     logger.info("Attempting recovery after Kafka exception...")
                     time.sleep(5)
 
         except Exception as e:
-            logger.critical(f"Fatal error in consumer loop: {e}", exc_info=True)
+            logger.critical("Fatal error in consumer loop: %s", e, exc_info=True)
             raise
         finally:
             logger.info("Closing Kafka consumer.")

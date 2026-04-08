@@ -32,7 +32,7 @@ describe('ApiService', () => {
   it('createDevice() should POST /devices', () => {
     service.createDevice('sensor-01', 'TEMPERATURE', true).subscribe();
     const req = http.expectOne(r => r.url.includes('/devices') && r.method === 'POST');
-    expect(req.request.body).toEqual({ deviceId: 'sensor-01', type: 'TEMPERATURE', simulated: true });
+    expect(req.request.body).toEqual({ deviceId: 'sensor-01', type: 'TEMPERATURE', simulated: true, latitude: undefined, longitude: undefined });
     req.flush({ deviceId: 'sensor-01' });
   });
 

@@ -41,9 +41,9 @@ class ModelTrainer:
         try:
             if not os.path.exists(self.model_path):
                 os.makedirs(self.model_path, exist_ok=True)
-                logger.info(f"Created model storage directory at {self.model_path}")
+                logger.info("Created model storage directory at %s", self.model_path)
         except Exception as e:
-            logger.error(f"Failed to create model storage directory: {e}")
+            logger.error("Failed to create model storage directory: %s", e)
             raise
 
     def train_anomaly_model(self, data: pd.DataFrame | None = None) -> IsolationForest | None:
@@ -79,7 +79,7 @@ class ModelTrainer:
                 return None
 
             version = datetime.now().strftime("%Y%m%d_%H%M%S")
-            logger.info(f"Training model version {version} with {len(features)} samples.")
+            logger.info("Training model version %s with %d samples.", version, len(features))
 
             model = IsolationForest(
                 n_estimators=100,
@@ -108,9 +108,10 @@ class ModelTrainer:
             # Storing it here ensures training and inference use the same threshold.
             training_scores = model.decision_function(features)
             threshold = float(np.percentile(training_scores, 5))
+            flagged_pct = (training_scores < threshold).mean() * 100
             logger.info(
-                f"Threshold computed from training data (p5): {threshold:.4f} "
-                f"(flags {(training_scores < threshold).mean()*100:.1f}% of training samples)"
+                "Threshold computed from training data (p5): %.4f (flags %.1f%% of training samples)",
+                threshold, flagged_pct,
             )
 
             # Update 'latest' pointer
@@ -132,10 +133,10 @@ class ModelTrainer:
 
             self._update_registry(version, len(features), feature_names, latest_info["metrics"])
 
-            logger.info(f"Model version {version} saved and set as latest.")
+            logger.info("Model version %s saved and set as latest.", version)
             return model
         except Exception as e:
-            logger.error(f"Unexpected error during model training: {e}", exc_info=True)
+            logger.error("Unexpected error during model training: %s", e, exc_info=True)
             return None
 
     def _update_registry(self, version: str, samples: int, features: list[str], metrics: dict[str, Any]):
@@ -166,7 +167,7 @@ class ModelTrainer:
             with open(self.registry_file, "w") as f:
                 json.dump(registry, f, indent=4)
         except Exception as e:
-            logger.error(f"Failed to update model registry: {e}")
+            logger.error("Failed to update model registry: %s", e)
 
 if __name__ == "__main__":
     trainer = ModelTrainer()

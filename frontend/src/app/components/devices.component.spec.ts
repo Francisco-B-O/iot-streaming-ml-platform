@@ -19,12 +19,13 @@ describe('DevicesComponent', () => {
   beforeEach(async () => {
     apiSpy = jasmine.createSpyObj('ApiService', [
       'getDevices', 'createDevice', 'deleteDevice', 'setSimulated',
-      'getDeviceStats', 'sendTelemetry'
+      'getDeviceStats', 'sendTelemetry', 'getAreas'
     ]);
     snackSpy = jasmine.createSpyObj('MatSnackBar', ['open']);
 
     apiSpy.getDevices.and.returnValue(of(mockDevices));
     apiSpy.getDeviceStats.and.returnValue(of({ deviceId: 'sensor-01', lastSeen: null }));
+    apiSpy.getAreas.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [DevicesComponent, NoopAnimationsModule],
@@ -87,7 +88,7 @@ describe('DevicesComponent', () => {
     component.newId = 'sensor-03';
     component.newType = 'TEMPERATURE';
     component.create();
-    expect(apiSpy.createDevice).toHaveBeenCalledWith('sensor-03', 'TEMPERATURE', false);
+    expect(apiSpy.createDevice).toHaveBeenCalledWith('sensor-03', 'TEMPERATURE', false, null, null);
     expect(component.creating).toBeFalse();
     expect(component.showForm).toBeFalse();
     expect(component.newId).toBe('');

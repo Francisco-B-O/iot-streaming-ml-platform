@@ -3,8 +3,11 @@ package com.franciscobalonero.iotplatform.device.model;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,7 +20,10 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "areas")
-@Data
+@Getter
+@Setter
+@EqualsAndHashCode(of = "id")
+@ToString(exclude = "devices")
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
