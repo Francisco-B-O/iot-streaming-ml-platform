@@ -10,10 +10,18 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy only application source — avoids including test files or secrets
+COPY main.py .
+COPY streaming/ ./streaming/
+COPY config/ ./config/
 
 ENV PYTHONPATH=/app
 ENV PYSPARK_PYTHON=python3
 ENV PYSPARK_DRIVER_PYTHON=python3
+
+# Run as non-root user
+RUN useradd --no-create-home --shell /bin/false appuser && \
+    chown -R appuser /app
+USER appuser
 
 CMD ["python", "main.py"]
