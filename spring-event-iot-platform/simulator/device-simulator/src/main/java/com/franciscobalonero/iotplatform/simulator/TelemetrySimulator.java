@@ -13,10 +13,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -31,7 +31,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class TelemetrySimulator {
 
     private final RestTemplate restTemplate = new RestTemplate();
-    private final Random random = new Random();
+    private final SecureRandom random = new SecureRandom();
 
     /** Devices currently marked as simulated, refreshed periodically. */
     private final List<String> simulatedDevices = new CopyOnWriteArrayList<>();

@@ -339,7 +339,7 @@ services:
       - INPUT_TOPIC=device-data-processed
       - OUTPUT_TOPIC=device-data-enriched
       - WINDOW_SIZE=20
-      - CHECKPOINT_LOCATION=/tmp/spark-checkpoint
+      - CHECKPOINT_LOCATION=/app/spark-checkpoint
       - SPARK_MASTER=local[2]
     depends_on:
       kafka:
