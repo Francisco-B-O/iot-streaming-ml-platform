@@ -21,7 +21,7 @@ public class RuleService {
 
     private final RuleRepository ruleRepository;
     private static final double DEFAULT_TEMPERATURE_THRESHOLD = 100.0;
-    private static final String TEMPERATURE_METRIC = TEMPERATURE_METRIC;
+    private static final String TEMPERATURE_METRIC = "temperature";
 
     /**
      * Updates the current temperature threshold.
