@@ -21,6 +21,7 @@ public class RuleService {
 
     private final RuleRepository ruleRepository;
     private static final double DEFAULT_TEMPERATURE_THRESHOLD = 100.0;
+    private static final String TEMPERATURE_METRIC = TEMPERATURE_METRIC;
 
     /**
      * Updates the current temperature threshold.
@@ -32,9 +33,9 @@ public class RuleService {
     public void updateTemperatureThreshold(double threshold) {
         try {
             log.info("Updating temperature threshold to: {}", threshold);
-            Rule rule = ruleRepository.findByMetric("temperature")
+            Rule rule = ruleRepository.findByMetric(TEMPERATURE_METRIC)
                     .orElseGet(() -> Rule.builder()
-                            .metric("temperature")
+                            .metric(TEMPERATURE_METRIC)
                             .ruleName("Default Temperature Check")
                             .build());
             rule.setThreshold(threshold);
@@ -54,7 +55,7 @@ public class RuleService {
     @Transactional(readOnly = true)
     public double getTemperatureThreshold() {
         try {
-            return ruleRepository.findByMetric("temperature")
+            return ruleRepository.findByMetric(TEMPERATURE_METRIC)
                     .map(Rule::getThreshold)
                     .orElse(DEFAULT_TEMPERATURE_THRESHOLD);
         } catch (Exception e) {

@@ -45,13 +45,13 @@ describe('HealthComponent', () => {
   });
 
   it('should mark gateway as down when call fails', () => {
-    apiSpy.getGatewayHealth.and.returnValue(throwError(() => new Error()));
+    apiSpy.getGatewayHealth.and.returnValue(throwError(() => new Error('gateway error')));
     component.checkAll();
     expect(component.services[0].status).toBe('down');
   });
 
   it('should mark ML as down when call fails', () => {
-    apiSpy.getMlHealth.and.returnValue(throwError(() => new Error()));
+    apiSpy.getMlHealth.and.returnValue(throwError(() => new Error('ml error')));
     component.checkAll();
     expect(component.services[1].status).toBe('down');
   });
@@ -63,7 +63,7 @@ describe('HealthComponent', () => {
   });
 
   it('allUp should be false when any service is down', () => {
-    apiSpy.getGatewayHealth.and.returnValue(throwError(() => new Error()));
+    apiSpy.getGatewayHealth.and.returnValue(throwError(() => new Error('gateway error')));
     component.checkAll();
     expect(component.allUp).toBeFalse();
   });

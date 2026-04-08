@@ -83,11 +83,9 @@ class TestCustomThreshold:
     def test_lower_threshold_catches_more(self):
         strict = ZScoreModel(threshold=2.0)
         r = strict.predict(_event(30.0, spark=_spark(temp_std=2.0)))
-        # z=2.5 > 2.0
         assert r["is_anomaly"] is True
 
     def test_higher_threshold_misses_mild_outlier(self):
         lenient = ZScoreModel(threshold=5.0)
         r = lenient.predict(_event(30.0, spark=_spark(temp_std=2.0)))
-        # z=2.5 < 5.0
         assert r["is_anomaly"] is False

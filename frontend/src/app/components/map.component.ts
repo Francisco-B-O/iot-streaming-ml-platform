@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, OnDestroy, AfterViewInit,
+  Component, OnDestroy, AfterViewInit,
   ElementRef, ViewChild, ChangeDetectorRef, ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -7,7 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { forkJoin, of, catchError, switchMap } from 'rxjs';
+import { forkJoin, of, catchError } from 'rxjs';
 import * as L from 'leaflet';
 import 'leaflet-draw';
 import 'leaflet.heat';
@@ -465,7 +465,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private readonly histCache  = new Map<string, { temp: number|null; hum: number|null; vib: number|null } | null>();
   // Area layer map for edit support (areaId → L.Polygon)
 
-  constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
+  constructor(private readonly api: ApiService, private readonly cdr: ChangeDetectorRef) {}
 
   ngAfterViewInit(): void {
     this.initMap();
@@ -560,7 +560,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       this.areas = rawAreas.map(area => {
         const inside = this.devices.filter(
           d => d.latitude != null && d.longitude != null &&
-               this.pointInPolygon(d.latitude!, d.longitude!, area.polygon)
+               this.pointInPolygon(d.latitude as number, d.longitude as number, area.polygon)
         );
         return { ...area, deviceIds: inside.map(d => d.deviceId), deviceCount: inside.length };
       });
@@ -735,7 +735,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private stopDraw(): void {
-    try { this.map.removeControl(this.drawControl); } catch (_) {}
+    try {
+      this.map.removeControl(this.drawControl);
+    } catch (e) {
+      console.debug('drawControl not on map:', e);
+    }
   }
 
   saveArea(): void {
@@ -813,14 +817,13 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private buildTooltip(d: MapDevice): string {
-    const cached = this.histCache.has(d.deviceId) ? (this.histCache.get(d.deviceId) ?? null) : null;
-    const badge  = d.isAnomaly ? '<span class="pop-badge anomaly" style="margin-left:6px;vertical-align:middle">ANOMALY</span>' : '';
-    const rows   = [
-      cached?.temp != null ? `<div class="pop-row"><b>Temp</b> ${cached.temp.toFixed(1)} °C</div>` : '',
-      cached?.hum  != null ? `<div class="pop-row"><b>Humidity</b> ${cached.hum.toFixed(1)} %</div>` : '',
-      cached?.vib  != null ? `<div class="pop-row"><b>Vibration</b> ${cached.vib.toFixed(3)} m/s²</div>` : '',
-      !this.histCache.has(d.deviceId) ? '<div class="pop-row" style="color:#94a3b8">Loading…</div>' : '',
-    ].join('');
+    const cached  = this.histCache.has(d.deviceId) ? (this.histCache.get(d.deviceId) ?? null) : null;
+    const badge   = d.isAnomaly ? '<span class="pop-badge anomaly" style="margin-left:6px;vertical-align:middle">ANOMALY</span>' : '';
+    const tempRow = this.sensorRow('Temp',      cached?.temp, v => `${v.toFixed(1)} °C`);
+    const humRow  = this.sensorRow('Humidity',  cached?.hum,  v => `${v.toFixed(1)} %`);
+    const vibRow  = this.sensorRow('Vibration', cached?.vib,  v => `${v.toFixed(3)} m/s²`);
+    const loadRow = this.histCache.has(d.deviceId) ? '' : '<div class="pop-row" style="color:#94a3b8">Loading…</div>';
+    const rows    = [tempRow, humRow, vibRow, loadRow].join('');
     return `<div class="iot-popup" style="min-width:150px">
       <div class="pop-header">
         <span class="pop-id">${d.deviceId}</span>${badge}
@@ -835,29 +838,31 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private buildPopupHtml(d: MapDevice): string {
-    const color = d.isAnomaly ? '#ef4444' : (d.status !== 'ACTIVE' ? '#94a3b8' : ((d.anomalyScore ?? 0) > 0.3 ? '#f59e0b' : '#22c55e'));
+    const color    = this.markerColor(d);
     const severity = d.isAnomaly
       ? `<span class="pop-badge anomaly">ANOMALY</span>`
       : `<span class="pop-badge normal">NORMAL</span>`;
     const area  = d.areaName ? `<div class="pop-row"><b>Zone</b> ${d.areaName}</div>` : '';
     const score = d.isAnomaly && d.anomalyScore != null
-      ? `<div class="pop-row"><b>Score</b> ${(d.anomalyScore as number).toFixed(4)}</div>` : '';
-    const gps   = d.latitude != null
-      ? `<div class="pop-row"><b>GPS</b> ${d.latitude.toFixed(4)}, ${d.longitude!.toFixed(4)}</div>` : '';
-    const cached = this.histCache.get(d.deviceId) ?? null;
+      ? `<div class="pop-row"><b>Score</b> ${d.anomalyScore.toFixed(4)}</div>` : '';
+    let gps = '';
+    if (d.latitude !== null && d.latitude !== undefined && d.longitude !== null && d.longitude !== undefined) {
+      gps = `<div class="pop-row"><b>GPS</b> ${d.latitude.toFixed(4)}, ${d.longitude.toFixed(4)}</div>`;
+    }
+    const cached  = this.histCache.get(d.deviceId) ?? null;
     const loading = !this.histCache.has(d.deviceId);
-    const t = loading ? 'Loading…' : (cached?.temp != null ? `${cached.temp.toFixed(1)} °C`   : 'N/A');
-    const h = loading ? 'Loading…' : (cached?.hum  != null ? `${cached.hum.toFixed(1)} %`     : 'N/A');
-    const v = loading ? 'Loading…' : (cached?.vib  != null ? `${cached.vib.toFixed(3)} m/s²`  : 'N/A');
+    const temp = this.formatSensorDisplay(loading, cached?.temp, n => `${n.toFixed(1)} °C`);
+    const hum  = this.formatSensorDisplay(loading, cached?.hum,  n => `${n.toFixed(1)} %`);
+    const vib  = this.formatSensorDisplay(loading, cached?.vib,  n => `${n.toFixed(3)} m/s²`);
     return `
       <div class="iot-popup">
         <div class="pop-header">
           <span class="pop-id" style="border-left:3px solid ${color};padding-left:6px">${d.deviceId}</span>
           ${severity}
         </div>
-        <div class="pop-row"><b>Temp</b> ${t}</div>
-        <div class="pop-row"><b>Humidity</b> ${h}</div>
-        <div class="pop-row"><b>Vibration</b> ${v}</div>
+        <div class="pop-row"><b>Temp</b> ${temp}</div>
+        <div class="pop-row"><b>Humidity</b> ${hum}</div>
+        <div class="pop-row"><b>Vibration</b> ${vib}</div>
         <div class="pop-row"><b>Type</b> ${d.type}</div>
         <div class="pop-row"><b>Status</b> ${d.status}</div>
         ${area}
@@ -865,5 +870,18 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         ${score}
         <div class="pop-row"><b>Simulated</b> ${d.simulated ? 'Yes' : 'No'}</div>
       </div>`;
+  }
+
+  private sensorRow(label: string, value: number | null | undefined, format: (v: number) => string): string {
+    if (value !== null && value !== undefined) {
+      return `<div class="pop-row"><b>${label}</b> ${format(value)}</div>`;
+    }
+    return '';
+  }
+
+  private formatSensorDisplay(loading: boolean, value: number | null | undefined, format: (v: number) => string): string {
+    if (loading) return 'Loading…';
+    if (value !== null && value !== undefined) return format(value);
+    return 'N/A';
   }
 }

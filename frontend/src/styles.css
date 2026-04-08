@@ -651,7 +651,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-family: 'Inter', sans-serif !important;
   font-size: .72rem !important;
   font-weight: 700 !important;
-  color: #6366f1 !important;
+  color: #3730a3 !important;
   white-space: nowrap;
 }
 .area-label::before { display: none !important; }
@@ -660,5 +660,5 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .area-label-risk {
   background: rgba(254,226,226,.92) !important;
   border-color: #fca5a5 !important;
-  color: #dc2626 !important;
+  color: #991b1b !important;
 }

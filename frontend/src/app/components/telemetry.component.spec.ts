@@ -62,7 +62,7 @@ describe('TelemetryComponent', () => {
     component.setPreset('crit');
     expect(component.tTemp).toBe(115);
     expect(component.tHum).toBe(95);
-    expect(component.tVib).toBe(8.0);
+    expect(component.tVib).toBe(8);
   });
 
   it('send() should do nothing when no device selected', () => {

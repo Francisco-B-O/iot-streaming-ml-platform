@@ -118,7 +118,7 @@ describe('DevicesComponent', () => {
     component.preset('critical');
     expect(component.tTemp).toBe(115);
     expect(component.tHum).toBe(95);
-    expect(component.tVib).toBe(8.0);
+    expect(component.tVib).toBe(8);
   });
 
   it('openTelemetry() should set telDevice and reset sensor defaults', () => {

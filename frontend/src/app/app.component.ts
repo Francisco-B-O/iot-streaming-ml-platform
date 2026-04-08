@@ -548,9 +548,8 @@ export class AppComponent implements OnInit, OnDestroy {
       const pending = alerts.filter((x: any) => !x.acknowledged);
       this.alertBadge = pending.length;
       // Keep latest 10 unacknowledged sorted by timestamp desc for the panel
-      this.recentAlerts = pending
-        .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 10);
+      const sorted = [...pending].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      this.recentAlerts = sorted.slice(0, 10);
     });
   }
 

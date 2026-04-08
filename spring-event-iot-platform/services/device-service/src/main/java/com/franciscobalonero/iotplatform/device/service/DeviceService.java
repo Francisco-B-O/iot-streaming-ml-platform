@@ -32,6 +32,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DeviceService {
 
+    private static final String DEVICE_WITH_ID_PREFIX = "Device with ID ";
+    private static final String NOT_FOUND_SUFFIX      = " not found";
+
     private final DeviceRepository deviceRepository;
     private final AreaRepository areaRepository;
     private final DeviceMapper deviceMapper;
@@ -70,7 +73,7 @@ public class DeviceService {
         log.info("Creating device with ID: {}", request.getDeviceId());
         
         if (deviceRepository.findByDeviceId(request.getDeviceId()).isPresent()) {
-            throw new ConflictException("Device with ID " + request.getDeviceId() + " already exists");
+            throw new ConflictException(DEVICE_WITH_ID_PREFIX + request.getDeviceId() + " already exists");
         }
 
         Device device = deviceMapper.toEntity(request);
@@ -88,7 +91,7 @@ public class DeviceService {
     public void deleteDevice(String deviceId) {
         log.info("Deleting device with ID: {}", deviceId);
         Device device = deviceRepository.findByDeviceId(deviceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Device with ID " + deviceId + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(DEVICE_WITH_ID_PREFIX + deviceId + NOT_FOUND_SUFFIX));
         deviceRepository.delete(device);
     }
 
@@ -138,7 +141,7 @@ public class DeviceService {
     public DeviceDto setSimulated(String deviceId, boolean simulated) {
         log.info("Setting simulated={} for device: {}", simulated, deviceId);
         Device device = deviceRepository.findByDeviceId(deviceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Device with ID " + deviceId + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(DEVICE_WITH_ID_PREFIX + deviceId + NOT_FOUND_SUFFIX));
         device.setSimulated(simulated);
         return deviceMapper.toDto(deviceRepository.save(device));
     }
@@ -157,7 +160,7 @@ public class DeviceService {
     public DeviceDto updateLocation(String deviceId, Double latitude, Double longitude) {
         log.info("Updating location for device '{}': lat={}, lng={}", deviceId, latitude, longitude);
         Device device = deviceRepository.findByDeviceId(deviceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Device with ID " + deviceId + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(DEVICE_WITH_ID_PREFIX + deviceId + NOT_FOUND_SUFFIX));
         device.setLatitude(latitude);
         device.setLongitude(longitude);
         return deviceMapper.toDto(deviceRepository.save(device));

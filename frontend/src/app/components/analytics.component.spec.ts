@@ -101,7 +101,7 @@ describe('AnalyticsComponent', () => {
   });
 
   it('loadAll() should handle API error gracefully', () => {
-    apiSpy.getDevices.and.returnValue(throwError(() => new Error()));
+    apiSpy.getDevices.and.returnValue(throwError(() => new Error('API error')));
     component.loadAll();
     expect(component.devices.length).toBe(0);
     expect(component.loading).toBeFalse();

@@ -5,7 +5,7 @@ ALTER TABLE devices ADD COLUMN longitude DOUBLE PRECISION;
 -- Areas table
 CREATE TABLE areas (
     id         UUID          PRIMARY KEY,
-    name       VARCHAR(255)  NOT NULL,
+    name       CHARACTER VARYING(255)  NOT NULL,
     polygon    TEXT          NOT NULL,
     created_at TIMESTAMP     NOT NULL
 );

@@ -772,9 +772,9 @@ export class DevicesComponent implements OnInit, OnDestroy {
 
     const center: L.LatLngTuple = this.pickedLat != null && this.pickedLng != null
       ? [this.pickedLat, this.pickedLng]
-      : [40.416775, -3.703790]; // Madrid as default center
+      : [40.416775, -3.70379]; // Madrid as default center
 
-    this.locMap = L.map('loc-picker-map', { zoomControl: true }).setView(center, this.pickedLat != null ? 13 : 5);
+    this.locMap = L.map('loc-picker-map', { zoomControl: true }).setView(center, this.pickedLat == null ? 5 : 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
@@ -782,7 +782,7 @@ export class DevicesComponent implements OnInit, OnDestroy {
     }).addTo(this.locMap);
 
     if (this.pickedLat != null && this.pickedLng != null) {
-      this.locMarker = L.marker([this.pickedLat, this.pickedLng], { draggable: true }).addTo(this.locMap!);
+      this.locMarker = L.marker([this.pickedLat, this.pickedLng], { draggable: true }).addTo(this.locMap);
       this.locMarker.on('dragend', () => {
         const pos = this.locMarker!.getLatLng();
         this.pickedLat = pos.lat;

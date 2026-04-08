@@ -13,11 +13,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Component responsible for simulating IoT device telemetry data.
@@ -34,7 +34,7 @@ public class TelemetrySimulator {
     private final Random random = new Random();
 
     /** Devices currently marked as simulated, refreshed periodically. */
-    private volatile List<String> simulatedDevices = new ArrayList<>();
+    private final List<String> simulatedDevices = new CopyOnWriteArrayList<>();
 
     @Value("${simulator.gateway-url}")
     private String gatewayUrl;
@@ -101,10 +101,12 @@ public class TelemetrySimulator {
             );
 
             if (response.getBody() != null) {
-                simulatedDevices = Arrays.stream(response.getBody())
+                List<String> updated = Arrays.stream(response.getBody())
                     .filter(d -> Boolean.TRUE.equals(d.get("simulated")))
                     .map(d -> (String) d.get("deviceId"))
                     .toList();
+                simulatedDevices.clear();
+                simulatedDevices.addAll(updated);
                 log.info("Simulator: {} simulated device(s): {}", simulatedDevices.size(), simulatedDevices);
             }
         } catch (Exception e) {

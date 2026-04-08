@@ -70,7 +70,7 @@ describe('DashboardComponent', () => {
   });
 
   it('should set mlOnline=false when health fails', () => {
-    apiSpy.getMlHealth.and.returnValue(throwError(() => new Error()));
+    apiSpy.getMlHealth.and.returnValue(throwError(() => new Error('health check failed')));
     component.refreshData();
     expect(component.mlOnline).toBeFalse();
   });
@@ -100,14 +100,14 @@ describe('DashboardComponent', () => {
   });
 
   it('trainModel() should set training=false on error', () => {
-    apiSpy.trainModel.and.returnValue(throwError(() => new Error()));
+    apiSpy.trainModel.and.returnValue(throwError(() => new Error('train model failed')));
     component.trainModel();
     expect(component.training).toBeFalse();
   });
 
   it('should gracefully handle API errors with empty fallbacks', () => {
-    apiSpy.getDevices.and.returnValue(throwError(() => new Error()));
-    apiSpy.getAlerts.and.returnValue(throwError(() => new Error()));
+    apiSpy.getDevices.and.returnValue(throwError(() => new Error('devices API error')));
+    apiSpy.getAlerts.and.returnValue(throwError(() => new Error('alerts API error')));
     component.refreshData();
     expect(component.deviceCount).toBe(0);
     expect(component.totalAlerts).toBe(0);

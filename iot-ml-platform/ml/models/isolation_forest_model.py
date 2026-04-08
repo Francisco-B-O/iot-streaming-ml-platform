@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any
 
 import joblib
@@ -22,6 +23,7 @@ from processing.data_processor import data_processor
 logger = logging.getLogger(__name__)
 
 INFERENCE_WINDOW_SIZE = 5
+_SAFE_VERSION_RE = re.compile(r'^[A-Za-z0-9_\-]+$')
 _BASE_COLS = {"deviceId", "timestamp"}
 
 
@@ -64,7 +66,11 @@ class IsolationForestModel:
             with open(self.latest_info_file) as f:
                 info = json.load(f)
 
-            version     = info["latest_version"]
+            version = str(info["latest_version"])
+            if not _SAFE_VERSION_RE.match(version):
+                logger.warning("Skipping model load: unsafe version string in latest_model.json")
+                return
+
             version_dir = os.path.join(self.model_path, version)
             model_file  = os.path.join(version_dir, "anomaly_detector.joblib")
             feat_file   = os.path.join(version_dir, "feature_names.joblib")
@@ -76,7 +82,7 @@ class IsolationForestModel:
                 self.threshold       = info.get("metrics", {}).get("threshold", self.threshold)
                 logger.info(
                     "IsolationForestModel loaded version=%s threshold=%.4f",
-                    version, self.threshold,
+                    self.current_version, self.threshold,
                 )
         except Exception as exc:
             logger.error("Failed to load Isolation Forest: %s", exc, exc_info=True)

@@ -42,15 +42,20 @@ class AreaServiceTest {
     @InjectMocks
     private AreaService areaService;
 
+    private static final String ZONE_A     = ZONE_A;
+    private static final String SENSOR_99  = SENSOR_99;
+    private static final String DUP_SENSOR = DUP_SENSOR;
+    private static final String GHOST      = GHOST;
+
     private static final List<List<Double>> POLYGON =
             List.of(List.of(40.0, -3.0), List.of(40.1, -3.0), List.of(40.1, -3.1));
 
     @Test
     void shouldCreateArea() {
-        AreaRequest request = new AreaRequest("Zone A", POLYGON);
+        AreaRequest request = new AreaRequest(ZONE_A, POLYGON);
 
-        Area entity = Area.builder().id(UUID.randomUUID()).name("Zone A").polygon(POLYGON).build();
-        AreaResponse baseResponse = AreaResponse.builder().id(entity.getId()).name("Zone A").polygon(POLYGON).build();
+        Area entity = Area.builder().id(UUID.randomUUID()).name(ZONE_A).polygon(POLYGON).build();
+        AreaResponse baseResponse = AreaResponse.builder().id(entity.getId()).name(ZONE_A).polygon(POLYGON).build();
 
         when(areaMapper.toEntity(request)).thenReturn(entity);
         when(areaRepository.save(any())).thenReturn(entity);
@@ -58,7 +63,7 @@ class AreaServiceTest {
 
         AreaResponse result = areaService.createArea(request);
 
-        assertThat(result.getName()).isEqualTo("Zone A");
+        assertThat(result.getName()).isEqualTo(ZONE_A);
         verify(areaRepository).save(entity);
     }
 
@@ -110,15 +115,15 @@ class AreaServiceTest {
                 .id(areaId).name("Assign Zone").polygon(POLYGON)
                 .devices(new ArrayList<>())
                 .build();
-        Device device = Device.builder().id(UUID.randomUUID()).deviceId("sensor-99").build();
+        Device device = Device.builder().id(UUID.randomUUID()).deviceId(SENSOR_99).build();
         AreaResponse baseResponse = AreaResponse.builder().id(areaId).name("Assign Zone").polygon(POLYGON).build();
 
         when(areaRepository.findById(areaId)).thenReturn(Optional.of(area));
-        when(deviceRepository.findByDeviceId("sensor-99")).thenReturn(Optional.of(device));
+        when(deviceRepository.findByDeviceId(SENSOR_99)).thenReturn(Optional.of(device));
         when(areaRepository.save(any())).thenReturn(area);
         when(areaMapper.toResponse(any())).thenReturn(baseResponse);
 
-        AreaResponse result = areaService.assignDevice(areaId, "sensor-99");
+        AreaResponse result = areaService.assignDevice(areaId, SENSOR_99);
 
         assertThat(area.getDevices()).contains(device);
         assertThat(result).isNotNull();
@@ -127,7 +132,7 @@ class AreaServiceTest {
     @Test
     void shouldNotDuplicateDeviceOnReassignment() {
         UUID areaId = UUID.randomUUID();
-        Device device = Device.builder().id(UUID.randomUUID()).deviceId("dup-sensor").build();
+        Device device = Device.builder().id(UUID.randomUUID()).deviceId(DUP_SENSOR).build();
         Area area = Area.builder()
                 .id(areaId).name("Dup Zone").polygon(POLYGON)
                 .devices(new ArrayList<>(List.of(device)))
@@ -135,10 +140,10 @@ class AreaServiceTest {
         AreaResponse baseResponse = AreaResponse.builder().id(areaId).build();
 
         when(areaRepository.findById(areaId)).thenReturn(Optional.of(area));
-        when(deviceRepository.findByDeviceId("dup-sensor")).thenReturn(Optional.of(device));
+        when(deviceRepository.findByDeviceId(DUP_SENSOR)).thenReturn(Optional.of(device));
         when(areaMapper.toResponse(any())).thenReturn(baseResponse);
 
-        areaService.assignDevice(areaId, "dup-sensor");
+        areaService.assignDevice(areaId, DUP_SENSOR);
 
         assertThat(area.getDevices()).hasSize(1);   // still one, not two
         verify(areaRepository, never()).save(any()); // no save needed
@@ -186,10 +191,10 @@ class AreaServiceTest {
         Area area = Area.builder().id(areaId).name("Z").polygon(POLYGON).devices(new ArrayList<>()).build();
 
         when(areaRepository.findById(areaId)).thenReturn(Optional.of(area));
-        when(deviceRepository.findByDeviceId("ghost")).thenReturn(Optional.empty());
+        when(deviceRepository.findByDeviceId(GHOST)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> areaService.assignDevice(areaId, "ghost"))
+        assertThatThrownBy(() -> areaService.assignDevice(areaId, GHOST))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("ghost");
+                .hasMessageContaining(GHOST);
     }
 }

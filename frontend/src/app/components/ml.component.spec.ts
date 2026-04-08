@@ -53,7 +53,7 @@ describe('MlComponent', () => {
   });
 
   it('should set mlHealth=error when health call fails', () => {
-    apiSpy.getMlHealth.and.returnValue(throwError(() => new Error()));
+    apiSpy.getMlHealth.and.returnValue(throwError(() => new Error('health error')));
     component.loadAll();
     expect(component.mlHealth).toBe('error');
   });
@@ -78,7 +78,7 @@ describe('MlComponent', () => {
     component.setPredPreset('anomaly');
     expect(component.predTemp).toBe(150);
     expect(component.predHumidity).toBe(99);
-    expect(component.predVibration).toBe(12.0);
+    expect(component.predVibration).toBe(12);
   });
 
   it('predict() should do nothing when no device ID', () => {

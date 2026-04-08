@@ -24,6 +24,9 @@ import java.util.UUID;
 @Slf4j
 public class AreaService {
 
+    private static final String AREA_PREFIX     = "Area ";
+    private static final String NOT_FOUND_SUFFIX = " not found";
+
     private final AreaRepository areaRepository;
     private final DeviceRepository deviceRepository;
     private final AreaMapper areaMapper;
@@ -49,7 +52,7 @@ public class AreaService {
     public AreaResponse updatePolygon(UUID id, AreaRequest request) {
         log.info("Updating polygon for area {}", id);
         Area area = areaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Area " + id + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(AREA_PREFIX + id + NOT_FOUND_SUFFIX));
         area.setPolygon(request.getPolygon());
         return toResponse(areaRepository.save(area));
     }
@@ -59,7 +62,7 @@ public class AreaService {
     public void deleteArea(UUID id) {
         log.info("Deleting area {}", id);
         Area area = areaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Area " + id + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(AREA_PREFIX + id + NOT_FOUND_SUFFIX));
         areaRepository.delete(area);
     }
 

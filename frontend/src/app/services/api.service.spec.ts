@@ -52,11 +52,11 @@ describe('ApiService', () => {
   // ── Telemetry ───────────────────────────────────────────────────────────────
 
   it('sendTelemetry() should POST /telemetry with correct payload', () => {
-    service.sendTelemetry('sensor-01', 25.5, 60.0, 0.02).subscribe();
+    service.sendTelemetry('sensor-01', 25.5, 60, 0.02).subscribe();
     const req = http.expectOne(r => r.url.includes('/telemetry') && r.method === 'POST');
     expect(req.request.body).toEqual({
       deviceId: 'sensor-01',
-      payload: { temperature: 25.5, humidity: 60.0, vibration: 0.02 }
+      payload: { temperature: 25.5, humidity: 60, vibration: 0.02 }
     });
     req.flush({});
   });
@@ -113,10 +113,10 @@ describe('ApiService', () => {
   });
 
   it('predict() should POST /predict with enrichedData', () => {
-    service.predict('sensor-01', 95.0, 10.0, 8.0).subscribe();
+    service.predict('sensor-01', 95, 10, 8).subscribe();
     const req = http.expectOne(r => r.url.includes('/predict') && r.method === 'POST');
     expect(req.request.body.deviceId).toBe('sensor-01');
-    expect(req.request.body.enrichedData).toEqual({ temperature: 95.0, humidity: 10.0, vibration: 8.0 });
+    expect(req.request.body.enrichedData).toEqual({ temperature: 95, humidity: 10, vibration: 8 });
     req.flush({ is_anomaly: true });
   });
 
