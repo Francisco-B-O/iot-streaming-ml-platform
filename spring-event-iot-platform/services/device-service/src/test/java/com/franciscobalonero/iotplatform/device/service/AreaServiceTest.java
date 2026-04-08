@@ -42,10 +42,10 @@ class AreaServiceTest {
     @InjectMocks
     private AreaService areaService;
 
-    private static final String ZONE_A     = ZONE_A;
-    private static final String SENSOR_99  = SENSOR_99;
-    private static final String DUP_SENSOR = DUP_SENSOR;
-    private static final String GHOST      = GHOST;
+    private static final String ZONE_A     = "Zone A";
+    private static final String SENSOR_99  = "sensor-99";
+    private static final String DUP_SENSOR = "dup-sensor";
+    private static final String GHOST      = "ghost";
 
     private static final List<List<Double>> POLYGON =
             List.of(List.of(40.0, -3.0), List.of(40.1, -3.0), List.of(40.1, -3.1));

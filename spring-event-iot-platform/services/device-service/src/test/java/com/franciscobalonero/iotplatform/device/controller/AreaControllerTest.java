@@ -36,8 +36,8 @@ class AreaControllerTest {
     @MockBean
     private AreaService areaService;
 
-    private static final String ZONE_A    = ZONE_A;
-    private static final String NEW_ZONE  = NEW_ZONE;
+    private static final String ZONE_A    = "Zone A";
+    private static final String NEW_ZONE  = "New Zone";
     private static final String AREAS_URL = "/api/v1/areas";
     private static final String AREAS_ID_URL = "/api/v1/areas/";
     private static final String SENSOR_01 = "sensor-01";
