@@ -604,16 +604,19 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         fillOpacity: 0.9,
       });
 
-      marker.bindTooltip(this.buildTooltip(d), {
+      // Pass a function so Leaflet re-calls it on every update()
+      marker.bindTooltip(() => this.buildTooltip(d), {
         className: 'iot-tooltip',
         sticky: false,
         direction: 'top',
         offset: [0, -6],
       });
-      marker.on('tooltipopen', () => this.fetchAndRefresh(d, marker));
+      marker.on('tooltipopen', () =>
+        this.ensureHistory(d.deviceId, () => marker.getTooltip()?.update()));
 
-      marker.bindPopup(this.buildPopup(d), { maxWidth: 280 });
-      marker.on('popupopen', () => this.fetchAndRefresh(d, marker));
+      marker.bindPopup(() => this.buildPopup(d), { maxWidth: 280 });
+      marker.on('popupopen', () =>
+        this.ensureHistory(d.deviceId, () => marker.getPopup()?.update()));
 
       marker.addTo(this.markerGroup);
       this.markerMap.set(d.deviceId, marker);
@@ -763,25 +766,26 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   // ── Telemetry lazy-load (tooltip + popup) ────────────────────────────────
 
-  private fetchAndRefresh(d: MapDevice, marker: L.CircleMarker): void {
-    if (this.histCache.has(d.deviceId)) {
-      this.refreshMarkerContent(d, marker);
-      return;
-    }
-    this.api.getDeviceHistory(d.deviceId)
+  /**
+   * Ensures history data is in the cache for the given device.
+   * If already cached, calls {@code onReady} immediately (no-op for the
+   * caller since Leaflet already called the content function with the
+   * cached value when opening).  If not cached, fetches from the API
+   * and then calls {@code onReady} so the caller can trigger an
+   * {@code update()} — Leaflet re-invokes the bound function and the
+   * overlay refreshes with real data.
+   */
+  private ensureHistory(deviceId: string, onReady: () => void): void {
+    if (this.histCache.has(deviceId)) { return; }
+    this.api.getDeviceHistory(deviceId)
       .pipe(catchError(() => of([])))
       .subscribe((history: any[]) => {
         const entry = history[0] ?? null;
-        this.histCache.set(d.deviceId, entry
+        this.histCache.set(deviceId, entry
           ? { temp: entry.temperature ?? null, hum: entry.humidity ?? null, vib: entry.vibration ?? null }
           : null);
-        this.refreshMarkerContent(d, marker);
+        onReady();
       });
-  }
-
-  private refreshMarkerContent(d: MapDevice, marker: L.CircleMarker): void {
-    marker.getPopup()?.setContent(this.buildPopup(d));
-    marker.getTooltip()?.setContent(this.buildTooltip(d));
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -809,7 +813,21 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private buildTooltip(d: MapDevice): string {
-    return this.buildPopupHtml(d);
+    const cached = this.histCache.has(d.deviceId) ? (this.histCache.get(d.deviceId) ?? null) : null;
+    const badge  = d.isAnomaly ? '<span class="pop-badge anomaly" style="margin-left:6px;vertical-align:middle">ANOMALY</span>' : '';
+    const rows   = [
+      cached?.temp != null ? `<div class="pop-row"><b>Temp</b> ${cached.temp.toFixed(1)} °C</div>` : '',
+      cached?.hum  != null ? `<div class="pop-row"><b>Humidity</b> ${cached.hum.toFixed(1)} %</div>` : '',
+      cached?.vib  != null ? `<div class="pop-row"><b>Vibration</b> ${cached.vib.toFixed(3)} m/s²</div>` : '',
+      !this.histCache.has(d.deviceId) ? '<div class="pop-row" style="color:#94a3b8">Loading…</div>' : '',
+    ].join('');
+    return `<div class="iot-popup" style="min-width:150px">
+      <div class="pop-header">
+        <span class="pop-id">${d.deviceId}</span>${badge}
+      </div>
+      <div class="pop-row" style="color:#64748b">${d.type} · ${d.status}${d.areaName ? ' · ' + d.areaName : ''}</div>
+      ${rows}
+    </div>`;
   }
 
   private buildPopup(d: MapDevice): string {
