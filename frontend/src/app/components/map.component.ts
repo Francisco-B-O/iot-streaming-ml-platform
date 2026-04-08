@@ -160,6 +160,8 @@ interface MapArea {
     </div>
   `,
   styles: [`
+    :host { display: block; height: 100%; }
+
     .map-page {
       display: flex;
       height: 100%;
@@ -608,10 +610,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         direction: 'top',
         offset: [0, -6],
       });
-      marker.on('tooltipopen', () => this.loadHistory(d.deviceId, 'tip'));
+      marker.on('tooltipopen', () => this.fetchAndRefresh(d, marker));
 
-      marker.bindPopup(this.buildPopup(d), { maxWidth: 260 });
-      marker.on('popupopen', () => this.loadHistory(d.deviceId, 'pop'));
+      marker.bindPopup(this.buildPopup(d), { maxWidth: 280 });
+      marker.on('popupopen', () => this.fetchAndRefresh(d, marker));
 
       marker.addTo(this.markerGroup);
       this.markerMap.set(d.deviceId, marker);
@@ -761,31 +763,25 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   // ── Telemetry lazy-load (tooltip + popup) ────────────────────────────────
 
-  private loadHistory(deviceId: string, prefix: string): void {
-    if (this.histCache.has(deviceId)) {
-      this.applyHistToEl(deviceId, prefix, this.histCache.get(deviceId) ?? null);
+  private fetchAndRefresh(d: MapDevice, marker: L.CircleMarker): void {
+    if (this.histCache.has(d.deviceId)) {
+      this.refreshMarkerContent(d, marker);
       return;
     }
-    this.api.getDeviceHistory(deviceId)
+    this.api.getDeviceHistory(d.deviceId)
       .pipe(catchError(() => of([])))
       .subscribe((history: any[]) => {
         const entry = history[0] ?? null;
-        const val = entry
+        this.histCache.set(d.deviceId, entry
           ? { temp: entry.temperature ?? null, hum: entry.humidity ?? null, vib: entry.vibration ?? null }
-          : null;
-        this.histCache.set(deviceId, val);
-        this.applyHistToEl(deviceId, prefix, val);
+          : null);
+        this.refreshMarkerContent(d, marker);
       });
   }
 
-  private applyHistToEl(deviceId: string, prefix: string, val: { temp: number|null; hum: number|null; vib: number|null } | null): void {
-    const upd = (id: string, v: number | null, dec: number, unit: string) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = v != null ? `${v.toFixed(dec)} ${unit}` : 'N/A';
-    };
-    upd(`${prefix}-temp-${deviceId}`, val?.temp ?? null, 1, '°C');
-    upd(`${prefix}-hum-${deviceId}`,  val?.hum  ?? null, 1, '%');
-    upd(`${prefix}-vib-${deviceId}`,  val?.vib  ?? null, 3, 'm/s²');
+  private refreshMarkerContent(d: MapDevice, marker: L.CircleMarker): void {
+    marker.getPopup()?.setContent(this.buildPopup(d));
+    marker.getTooltip()?.setContent(this.buildTooltip(d));
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -813,14 +809,14 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   private buildTooltip(d: MapDevice): string {
-    return this.buildPopupHtml(d, 'tip');
+    return this.buildPopupHtml(d);
   }
 
   private buildPopup(d: MapDevice): string {
-    return this.buildPopupHtml(d, 'pop');
+    return this.buildPopupHtml(d);
   }
 
-  private buildPopupHtml(d: MapDevice, prefix: string): string {
+  private buildPopupHtml(d: MapDevice): string {
     const color = d.isAnomaly ? '#ef4444' : (d.status !== 'ACTIVE' ? '#94a3b8' : ((d.anomalyScore ?? 0) > 0.3 ? '#f59e0b' : '#22c55e'));
     const severity = d.isAnomaly
       ? `<span class="pop-badge anomaly">ANOMALY</span>`
@@ -830,19 +826,20 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       ? `<div class="pop-row"><b>Score</b> ${(d.anomalyScore as number).toFixed(4)}</div>` : '';
     const gps   = d.latitude != null
       ? `<div class="pop-row"><b>GPS</b> ${d.latitude.toFixed(4)}, ${d.longitude!.toFixed(4)}</div>` : '';
-    const cached = this.histCache.has(d.deviceId) ? this.histCache.get(d.deviceId) ?? null : null;
-    const t = cached ? (cached.temp != null ? `${cached.temp.toFixed(1)} °C`   : 'N/A') : '…';
-    const h = cached ? (cached.hum  != null ? `${cached.hum.toFixed(1)} %`     : 'N/A') : '…';
-    const v = cached ? (cached.vib  != null ? `${cached.vib.toFixed(3)} m/s²`  : 'N/A') : '…';
+    const cached = this.histCache.get(d.deviceId) ?? null;
+    const loading = !this.histCache.has(d.deviceId);
+    const t = loading ? 'Loading…' : (cached?.temp != null ? `${cached.temp.toFixed(1)} °C`   : 'N/A');
+    const h = loading ? 'Loading…' : (cached?.hum  != null ? `${cached.hum.toFixed(1)} %`     : 'N/A');
+    const v = loading ? 'Loading…' : (cached?.vib  != null ? `${cached.vib.toFixed(3)} m/s²`  : 'N/A');
     return `
       <div class="iot-popup">
         <div class="pop-header">
           <span class="pop-id" style="border-left:3px solid ${color};padding-left:6px">${d.deviceId}</span>
           ${severity}
         </div>
-        <div class="pop-row"><b>Temp</b>      <span id="${prefix}-temp-${d.deviceId}">${t}</span></div>
-        <div class="pop-row"><b>Humidity</b>  <span id="${prefix}-hum-${d.deviceId}">${h}</span></div>
-        <div class="pop-row"><b>Vibration</b> <span id="${prefix}-vib-${d.deviceId}">${v}</span></div>
+        <div class="pop-row"><b>Temp</b> ${t}</div>
+        <div class="pop-row"><b>Humidity</b> ${h}</div>
+        <div class="pop-row"><b>Vibration</b> ${v}</div>
         <div class="pop-row"><b>Type</b> ${d.type}</div>
         <div class="pop-row"><b>Status</b> ${d.status}</div>
         ${area}

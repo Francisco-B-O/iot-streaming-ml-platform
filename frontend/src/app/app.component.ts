@@ -371,7 +371,7 @@ interface RecentAlert {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 1.5rem; gap: 1rem;
       transition: background var(--t-slow), border-color var(--t-slow);
-      position: relative; z-index: 50;
+      position: relative; z-index: 1000;
     }
     .hamburger {
       display: none; background: none; border: none; cursor: pointer;
