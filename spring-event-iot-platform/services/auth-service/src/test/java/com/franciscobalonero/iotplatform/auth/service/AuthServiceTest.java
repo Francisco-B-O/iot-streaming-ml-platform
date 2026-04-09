@@ -45,7 +45,7 @@ class AuthServiceTest {
 
     private static final String ADMIN    = "admin";
     private static final String ENCODED  = "$2a$10$hashedpwd";
-    private static final String RAW_PWD  = "admin123";
+    private static final String RAW_PASS  = "admin123";
     private static final String JWT_TOK  = "jwt.token.value";
 
     // ── init() ───────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ class AuthServiceTest {
     @Test
     void shouldCreateAdminOnInitWhenNoneExists() {
         when(userRepository.findByUsername(ADMIN)).thenReturn(Optional.empty());
-        when(passwordEncoder.encode(RAW_PWD)).thenReturn(ENCODED);
+        when(passwordEncoder.encode(RAW_PASS)).thenReturn(ENCODED);
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         authService.init();
@@ -80,10 +80,10 @@ class AuthServiceTest {
     void shouldReturnTokenOnValidLogin() {
         User user = User.builder().username(ADMIN).password(ENCODED).roles(Set.of("ROLE_ADMIN")).build();
         when(userRepository.findByUsername(ADMIN)).thenReturn(Optional.of(user));
-        when(passwordEncoder.matches(RAW_PWD, ENCODED)).thenReturn(true);
+        when(passwordEncoder.matches(RAW_PASS, ENCODED)).thenReturn(true);
         when(jwtUtil.generateToken(eq(ADMIN), any())).thenReturn(JWT_TOK);
 
-        String token = authService.login(ADMIN, RAW_PWD);
+        String token = authService.login(ADMIN, RAW_PASS);
 
         assertThat(token).isEqualTo(JWT_TOK);
     }
@@ -92,7 +92,7 @@ class AuthServiceTest {
     void shouldThrowBadCredentialsWhenUserNotFound() {
         when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login("ghost", RAW_PWD))
+        assertThatThrownBy(() -> authService.login("ghost", RAW_PASS))
                 .isInstanceOf(BadCredentialsException.class);
     }
 

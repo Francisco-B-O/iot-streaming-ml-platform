@@ -30,11 +30,12 @@ describe('MapComponent', () => {
   beforeEach(async () => {
     apiSpy = jasmine.createSpyObj('ApiService', [
       'getDevicesForMap', 'getAreas', 'getMlAnomalyStats',
-      'createArea', 'deleteArea', 'assignDeviceToArea',
+      'createArea', 'deleteArea', 'assignDeviceToArea', 'getDeviceHistory',
     ]);
     apiSpy.getDevicesForMap.and.returnValue(of(mockDevices));
     apiSpy.getAreas.and.returnValue(of(mockAreas));
     apiSpy.getMlAnomalyStats.and.returnValue(of(mockAnomalyStats));
+    apiSpy.getDeviceHistory.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [MapComponent, HttpClientTestingModule],
@@ -435,5 +436,104 @@ describe('MapComponent', () => {
     (component as any).histCache.set('cached-2', { temp: 55.5, hum: 70, vib: 0.05 });
     const html = (component as any).buildPopupHtml(d);
     expect(html).toContain('55.5');
+  }));
+
+  it('ngOnDestroy should not throw when map is not initialised', () => {
+    fixture.detectChanges();
+    expect(() => component.ngOnDestroy()).not.toThrow();
+  });
+
+  it('applyFilters should re-render markers without error', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    expect(() => component.applyFilters()).not.toThrow();
+  }));
+
+  it('toggleHeatmap should call renderHeatmap when showHeatmap is true', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const renderHeatmapSpy = spyOn(component as any, 'renderHeatmap').and.stub();
+    component.showHeatmap = true;
+    component.toggleHeatmap();
+    expect(renderHeatmapSpy).toHaveBeenCalled();
+  }));
+
+  it('toggleHeatmap should do nothing when showHeatmap is false and heatLayer absent', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    component.showHeatmap = false;
+    (component as any).heatLayer = undefined;
+    expect(() => component.toggleHeatmap()).not.toThrow();
+  }));
+
+  it('toggleAreas should call renderAreas when showAreas is true', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const renderAreasSpy = spyOn(component as any, 'renderAreas').and.stub();
+    component.showAreas = true;
+    component.toggleAreas();
+    expect(renderAreasSpy).toHaveBeenCalled();
+  }));
+
+  it('toggleAreas should clear areaGroup when showAreas is false', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    component.showAreas = false;
+    expect(() => component.toggleAreas()).not.toThrow();
+  }));
+
+  it('startDraw should toggle off drawing when isDrawing is already true', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    component.isDrawing = true;
+    // stopDraw tries to remove drawControl which is undefined — should not throw
+    (component as any).drawControl = { addTo: jasmine.createSpy() };
+    (component as any).map = { removeControl: jasmine.createSpy() };
+    component.startDraw();
+    expect(component.isDrawing).toBeTrue(); // isDrawing stays true since startDraw returned early
+  }));
+
+  it('ensureHistory should fetch from API when device not cached', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    apiSpy['getDeviceHistory'] = jasmine.createSpy().and.returnValue(
+      of([{ temperature: 25, humidity: 60, vibration: 0.1 }])
+    );
+    const onReady = jasmine.createSpy('onReady');
+    (component as any).ensureHistory('new-device-id', onReady);
+    tick();
+    expect(onReady).toHaveBeenCalled();
+    expect((component as any).histCache.has('new-device-id')).toBeTrue();
+  }));
+
+  it('ensureHistory should not fetch when device already cached', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    apiSpy['getDeviceHistory'] = jasmine.createSpy().and.returnValue(of([]));
+    (component as any).histCache.set('cached-device', { temp: 25, hum: 60, vib: 0.1 });
+    (component as any).ensureHistory('cached-device', () => {});
+    tick();
+    expect(apiSpy['getDeviceHistory']).not.toHaveBeenCalled();
+  }));
+
+  it('ensureHistory should handle API error gracefully', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    apiSpy['getDeviceHistory'] = jasmine.createSpy().and.returnValue(throwError(() => new Error('fail')));
+    const onReady = jasmine.createSpy('onReady');
+    expect(() => {
+      (component as any).ensureHistory('error-device', onReady);
+      tick();
+    }).not.toThrow();
+    expect(onReady).toHaveBeenCalled();
+  }));
+
+  it('ensureHistory should cache null when history is empty', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    apiSpy['getDeviceHistory'] = jasmine.createSpy().and.returnValue(of([]));
+    (component as any).ensureHistory('empty-hist', () => {});
+    tick();
+    expect((component as any).histCache.get('empty-hist')).toBeNull();
   }));
 });

@@ -150,4 +150,17 @@ describe('AppComponent', () => {
     component.ngOnInit();
     expect(() => component.ngOnDestroy()).not.toThrow();
   });
+
+  it('constructor should apply dark mode and collapsed when localStorage flags are set', () => {
+    spyOn(localStorage, 'getItem').and.callFake((key: string) => {
+      if (key === 'iot_dark') return '1';
+      if (key === 'iot_sidebar_col') return '1';
+      return null;
+    });
+    // Re-create component so constructor runs again with the spy active
+    const newFixture = TestBed.createComponent(AppComponent);
+    const newComp = newFixture.componentInstance;
+    expect(newComp.isDark).toBeTrue();
+    expect(newComp.collapsed).toBeTrue();
+  });
 });

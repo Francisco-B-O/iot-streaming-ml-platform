@@ -306,4 +306,34 @@ describe('DevicesComponent', () => {
     tick();
     expect(component.deviceAreaMap.get('sensor-01')).toBe('Zone A');
   }));
+
+  it('load() should handle device with multiple areas and concatenate names', fakeAsync(() => {
+    const areas = [
+      { name: 'Zone A', deviceIds: ['sensor-01'] },
+      { name: 'Zone B', deviceIds: ['sensor-01'] },
+    ];
+    apiSpy.getAreas.and.returnValue(of(areas));
+    component.load();
+    tick();
+    expect(component.deviceAreaMap.get('sensor-01')).toContain('Zone A');
+    expect(component.deviceAreaMap.get('sensor-01')).toContain('Zone B');
+  }));
+
+  it('load() should set loading false when getDevices errors', fakeAsync(() => {
+    apiSpy.getDevices.and.returnValue(throwError(() => new Error('fail')));
+    component.load();
+    tick();
+    expect(component.loading).toBeFalse();
+  }));
+
+  it('applySearch() should filter by status', () => {
+    component.search = 'active';
+    component.applySearch();
+    expect(component.filtered.every(d => d.status.toLowerCase().includes('active'))).toBeTrue();
+  });
+
+  it('deviceTooltip() should return no-telemetry message when lastSeen is 0', () => {
+    const d = { ...mockDevices[0], lastSeen: 0 } as any;
+    expect(component.deviceTooltip(d)).toBe('No telemetry received');
+  });
 });

@@ -190,3 +190,67 @@ class TestMetadataPassthrough:
     def test_device_id_preserved(self):
         result = _enrich_row(_make_row(device_id="sensor-99"))
         assert result["deviceId"] == "sensor-99"
+
+
+# ---------------------------------------------------------------------------
+# make_batch_processor — process_batch inner function
+# ---------------------------------------------------------------------------
+
+class TestMakeBatchProcessor:
+    def test_returns_callable(self):
+        from streaming.processor import make_batch_processor
+        fn = make_batch_processor({"bootstrap.servers": "localhost:9092"}, "output-topic")
+        assert callable(fn)
+
+    def test_process_batch_skips_empty_dataframe(self):
+        from streaming.processor import make_batch_processor
+        fn = make_batch_processor({"bootstrap.servers": "localhost:9092"}, "out")
+        batch_df = MagicMock()
+        batch_df.rdd.isEmpty.return_value = True
+        # Should not raise and should not call collect
+        fn(batch_df, 0)
+        batch_df.collect.assert_not_called()
+
+    def test_process_batch_publishes_enriched_rows(self):
+        from streaming.processor import make_batch_processor
+        fn = make_batch_processor({"bootstrap.servers": "localhost:9092"}, "out")
+        row = {
+            "deviceId":     "dev-batch",
+            "eventId":      "e-1",
+            "timestamp":    "2026-01-01T00:00:00Z",
+            "status":       "NORMAL",
+            "enrichedData": {
+                "temperature":    20.0,
+                "humidity":       50.0,
+                "vibration":      0.01,
+                "deviceType":     "TEMP",
+                "deviceLocation": None,
+            },
+        }
+        batch_df = MagicMock()
+        batch_df.rdd.isEmpty.return_value = False
+        batch_df.collect.return_value = [row]
+        # Should not raise
+        fn(batch_df, 1)
+
+    def test_process_batch_handles_enrich_exception(self):
+        from streaming.processor import make_batch_processor
+        fn = make_batch_processor({"bootstrap.servers": "localhost:9092"}, "out")
+        # Passing a malformed row (missing required keys) will raise in _enrich_row
+        batch_df = MagicMock()
+        batch_df.rdd.isEmpty.return_value = False
+        batch_df.collect.return_value = [{"unexpected": "keys"}]
+        # Should not propagate — exception caught per-row
+        fn(batch_df, 2)
+
+
+# ---------------------------------------------------------------------------
+# create_spark_session
+# ---------------------------------------------------------------------------
+
+class TestCreateSparkSession:
+    def test_returns_spark_session_mock(self):
+        from streaming.processor import create_spark_session
+        result = create_spark_session(master="local[*]")
+        # SparkSession is fully mocked; just verify it returned something non-None
+        assert result is not None

@@ -245,7 +245,7 @@ class TestPredictNoModel:
         m = self._make_no_model_instance()
         with patch("os.path.exists", return_value=False):
             result = m.predict({"deviceId": "d1", "timestamp": "2026-01-01T00:00:00Z"})
-        assert result["score"] == 0.0
+        assert result["score"] == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -416,3 +416,76 @@ class TestBuildWindow:
             window = m._build_window(event)
 
         assert len(window) == 2
+
+
+# ---------------------------------------------------------------------------
+# load() — exception in load path
+# ---------------------------------------------------------------------------
+
+class TestLoadException:
+    def test_model_is_none_when_joblib_raises(self):
+        """If joblib.load raises, the exception should be caught and model set None."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _make_model_dir(tmp, "v1")
+
+            mock_settings = MagicMock()
+            mock_settings.MODEL_STORAGE_PATH = tmp
+            mock_settings.ANOMALY_THRESHOLD = -0.05
+
+            with patch("ml.models.isolation_forest_model.settings", mock_settings), \
+                 patch("joblib.load", side_effect=Exception("disk error")):
+                from ml.models.isolation_forest_model import IsolationForestModel
+                m = IsolationForestModel.__new__(IsolationForestModel)
+                m.model_path = tmp
+                m.latest_info_file = os.path.join(tmp, "latest_model.json")
+                m.model = None
+                m.feature_names = None
+                m.current_version = None
+                m.threshold = -0.05
+                m.load()
+
+            assert m.model is None
+
+
+# ---------------------------------------------------------------------------
+# predict() — exception in prediction path
+# ---------------------------------------------------------------------------
+
+class TestPredictException:
+    def test_predict_returns_false_on_exception(self):
+        """If data_processor raises during predict, should return safe default."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _make_model_dir(tmp, "v1")
+
+            mock_settings = MagicMock()
+            mock_settings.MODEL_STORAGE_PATH = tmp
+            mock_settings.ANOMALY_THRESHOLD = -0.05
+
+            with patch("ml.models.isolation_forest_model.settings", mock_settings):
+                from ml.models.isolation_forest_model import IsolationForestModel
+                m = IsolationForestModel.__new__(IsolationForestModel)
+                m.model_path = tmp
+                m.latest_info_file = os.path.join(tmp, "latest_model.json")
+                m.model = None
+                m.feature_names = None
+                m.current_version = None
+                m.threshold = -0.05
+                m.load()
+
+            assert m.model is not None
+
+            mock_lake = MagicMock()
+            mock_lake.get_recent_events_for_device.return_value = pd.DataFrame()
+
+            with patch("storage.data_lake.data_lake", mock_lake), \
+                 patch("ml.models.isolation_forest_model.data_processor") as mock_proc:
+                mock_proc.prepare_for_ml.side_effect = Exception("processing error")
+                result = m.predict({
+                    "deviceId": "d1",
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "enrichedData.temperature": 25.0,
+                    "enrichedData.humidity": 50.0,
+                })
+
+            assert result["is_anomaly"] is False
+            assert result["score"] == pytest.approx(0.0)

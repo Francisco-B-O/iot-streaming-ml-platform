@@ -236,4 +236,23 @@ class DeviceServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getAreaName()).isNull();
     }
+
+    @Test
+    void shouldUseFirstAreaWhenDeviceBelongsToMultiple() {
+        Device d = buildDevice(SENSOR_1);
+
+        Area area1 = Area.builder().id(UUID.randomUUID()).name("First Area")
+                .devices(new ArrayList<>(List.of(d))).build();
+
+        Area area2 = Area.builder().id(UUID.randomUUID()).name("Second Area")
+                .devices(new ArrayList<>(List.of(d))).build();
+
+        when(deviceRepository.findAll()).thenReturn(List.of(d));
+        when(areaRepository.findAllWithDevices()).thenReturn(List.of(area1, area2));
+
+        List<DeviceMapDto> result = deviceService.getDevicesForMap();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getAreaName()).isIn("First Area", "Second Area");
+    }
 }

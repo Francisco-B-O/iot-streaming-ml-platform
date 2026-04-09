@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -162,6 +163,30 @@ class TelemetryListenerTest {
         DeviceTelemetryEvent event = DeviceTelemetryEvent.builder()
                 .eventId(UUID.randomUUID()).deviceId("sensor-1")
                 .payload(Map.of("temperature", "not-a-number")).build();
+
+        when(idempotencyRecordRepository.existsById(any())).thenReturn(false);
+        when(idempotencyRecordRepository.save(any(IdempotencyRecord.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(deviceClient.getDeviceById("sensor-1")).thenReturn(Optional.of(deviceResponse("sensor-1")));
+
+        telemetryListener.handleTelemetry(event);
+
+        ArgumentCaptor<ProcessedTelemetryEvent> captor = ArgumentCaptor.forClass(ProcessedTelemetryEvent.class);
+        verify(kafkaTemplate).send(eq("device-data-processed"), eq("sensor-1"), captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo("NORMAL");
+    }
+
+    /**
+     * Missing temperature key in payload → tempVal is null → not instanceof Number,
+     * null-check branch → NORMAL (no warn log).
+     */
+    @Test
+    void shouldTreatNullTemperatureAsNormal() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("temperature", null);
+        DeviceTelemetryEvent event = DeviceTelemetryEvent.builder()
+                .eventId(UUID.randomUUID()).deviceId("sensor-1")
+                .payload(payload).build();
 
         when(idempotencyRecordRepository.existsById(any())).thenReturn(false);
         when(idempotencyRecordRepository.save(any(IdempotencyRecord.class)))
