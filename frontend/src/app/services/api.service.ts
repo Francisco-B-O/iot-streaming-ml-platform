@@ -130,6 +130,6 @@ export class ApiService {
   }
 
   getDiscoveryHealth(): Observable<any> {
-    return this.http.get(`${environment.discoveryUrl}/actuator/health`);
+    return this.http.get(`${environment.apiGatewayUrl}/discovery/health`);
   }
 }
