@@ -287,7 +287,7 @@ export class HealthComponent implements OnInit {
   services: ServiceStatus[] = [
     { name: 'API Gateway',       icon: 'security',          url: `${environment.apiGatewayUrl.replace('/api/v1', '')}/actuator/health`, status: 'checking' },
     { name: 'ML Platform',       icon: 'psychology',         url: `${environment.mlApiUrl}/health`,                                      status: 'checking' },
-    { name: 'Discovery Service', icon: 'hub',                url: `${environment.discoveryUrl}/actuator/health`,                         status: 'checking' },
+    { name: 'Discovery Service', icon: 'hub',                url: `${environment.apiGatewayUrl}/discovery/health`,                       status: 'checking' },
   ];
 
   checking = false;
