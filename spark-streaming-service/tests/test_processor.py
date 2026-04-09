@@ -26,7 +26,7 @@ def _make_pyspark_stub() -> None:
     # pyspark.sql (must look like a package so sub-module lookups work)
     pyspark_sql = types.ModuleType("pyspark.sql")
     pyspark_sql.DataFrame   = MagicMock
-    pyspark_sql.SparkSession = MagicMock
+    pyspark_sql.SparkSession = MagicMock()
     pyspark.__path__ = []        # marks it as a package
     pyspark_sql.__path__ = []
 
@@ -42,7 +42,7 @@ def _make_pyspark_stub() -> None:
 
     # confluent_kafka
     confluent_kafka = types.ModuleType("confluent_kafka")
-    confluent_kafka.Producer = MagicMock
+    confluent_kafka.Producer = MagicMock()
 
     sys.modules.setdefault("pyspark",               pyspark)
     sys.modules.setdefault("pyspark.sql",            pyspark_sql)

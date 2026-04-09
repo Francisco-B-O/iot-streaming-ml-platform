@@ -488,7 +488,7 @@ describe('MapComponent', () => {
     component.isDrawing = true;
     // stopDraw tries to remove drawControl which is undefined — should not throw
     (component as any).drawControl = { addTo: jasmine.createSpy() };
-    (component as any).map = { removeControl: jasmine.createSpy() };
+    (component as any).map = { removeControl: jasmine.createSpy(), remove: jasmine.createSpy() };
     component.startDraw();
     expect(component.isDrawing).toBeTrue(); // isDrawing stays true since startDraw returned early
   }));
