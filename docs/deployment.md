@@ -29,7 +29,7 @@ Defaults in `docker-compose.yml` work out of the box for local dev. For a real d
 | Variable | Used by | Description |
 |----------|---------|-------------|
 | `JWT_SECRET` | auth-service, gateway-service | Must be the same in both, ≥ 256 bits |
-| `SPRING_DATASOURCE_PASSWORD` | auth-service, device-service, processing-service | PostgreSQL password |
+| `SPRING_DATASOURCE_PASSWORD` | auth-service, device-service, processing-service, alert-service | PostgreSQL password |
 | `KAFKA_BOOTSTRAP_SERVERS` | all Spring services, ml-platform | Internal: `kafka:29092` |
 | `ANOMALY_THRESHOLD` | iot-ml-platform | Override ML detection threshold |
 

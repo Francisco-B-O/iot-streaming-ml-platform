@@ -47,7 +47,9 @@ Three services use PostgreSQL (shared container, separate schemas/tables):
 - `areas`: id (UUID), name (VARCHAR), polygon (TEXT — JSON array of `[lat,lng]` pairs serialised by `PolygonConverter`), createdAt
 - `area_devices` (join table): area_id → areas(id) ON DELETE CASCADE, device_id → devices(id) ON DELETE CASCADE; PRIMARY KEY (area_id, device_id)
 
-**processing-service** — processed event storage.
+**processing-service** — two tables:
+- `processed_events`: eventId (UUID, PK), processedAt (Instant) — idempotency records to avoid double-processing
+- `rules`: id (Long, PK), ruleName, metric, threshold (double), description — runtime-configurable alert thresholds
 
 **alert-service** — `alerts` table: id, deviceId, severity (CRITICAL/HIGH/MEDIUM/LOW), message, timestamp, acknowledged (boolean).
 

@@ -45,6 +45,7 @@ public class SecurityConfig {
                 .pathMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .pathMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/v3/api-docs/**", "/swagger-ui/**", "/webjars/**").permitAll()
                 .pathMatchers("/actuator/**").permitAll()
+                .pathMatchers("/api/v1/discovery/**").permitAll()
                 .pathMatchers("/api/v1/ml/train/**").hasRole("ADMIN")
                 .anyExchange().authenticated()
             )

@@ -99,15 +99,14 @@ Internal Kafka address: `kafka:29092`. External access: `localhost:9092`.
 
 ## ML prediction path (detail)
 
-When the Kafka consumer receives a `device-data-processed` event:
+When the Kafka consumer receives a `device-data-enriched` event (published by Spark Streaming Service):
 
 1. Event payload is stored to the Parquet data lake (`data/raw/day=YYYY-MM-DD/`)
-2. `predict_anomaly()` calls `_build_inference_window()`:
-   - Fetches last 4 events for the device from the data lake (newest Parquet files, capped at 300 files scanned)
-   - Prepends them to the current event → 5-event window
-3. `prepare_for_ml()` computes 24 features: raw values (temperature, humidity, vibration) + per-device rolling stats over the window (mean, std, min, max, delta)
-4. Model scores the feature vector with `decision_function()`
-5. Score < threshold (-0.0363) → anomaly; published to both `ml-predictions` and `ml-anomalies`
-6. Score ≥ threshold → normal; published to `ml-predictions` only
+2. `EnsemblePredictor.predict_anomaly()` runs three models in parallel:
+   - **Isolation Forest** (`IsolationForestModel`) — fetches last 4 events for the device from the data lake to build a 5-event rolling window; scores via `decision_function()`; score < threshold (5th-percentile of training scores) → anomaly vote (weight 2)
+   - **Z-score** (`ZScoreModel`) — uses `sparkFeatures.temp_std`, `hum_std`, `vib_std` from the Spark-enriched payload; z > 3σ on any sensor → anomaly vote (weight 1)
+   - **Trend** (`TrendModel`) — fires when `sparkFeatures.trend == "increasing"` AND `temp_std > 5` AND `temp_range > 10`; anomaly vote (weight 1)
+3. `EnsembleDecision.decide()` sums weighted votes: total ≥ 2 → anomaly
+4. Result is published to `ml-predictions`; if anomalous, also to `ml-anomalies`
 
-The threshold is computed at training time as the 5th percentile of training scores and stored in `ml/models/latest_model.json`.
+The Isolation Forest threshold is computed at training time as the 5th percentile of training scores and stored in `ml/models/latest_model.json`.

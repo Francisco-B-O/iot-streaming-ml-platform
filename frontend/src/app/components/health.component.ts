@@ -287,7 +287,7 @@ export class HealthComponent implements OnInit {
   services: ServiceStatus[] = [
     { name: 'API Gateway',       icon: 'security',          url: `${environment.apiGatewayUrl.replace('/api/v1', '')}/actuator/health`, status: 'checking' },
     { name: 'ML Platform',       icon: 'psychology',         url: `${environment.mlApiUrl}/health`,                                      status: 'checking' },
-    { name: 'Discovery Service', icon: 'hub',                url: `${environment.discoveryUrl}/actuator/health`,                         status: 'checking' },
+    { name: 'Discovery Service', icon: 'hub',                url: `${environment.apiGatewayUrl}/discovery/health`,                       status: 'checking' },
   ];
 
   checking = false;
@@ -320,7 +320,9 @@ export class HealthComponent implements OnInit {
       const svc = this.services[2];
       const discoveryStatus = r?.components?.discoveryComposite?.status;
       svc.status = discoveryStatus === 'UP' ? 'up' : 'down';
-      svc.details = r?.components?.discoveryComposite;
+      svc.details = r?.components?.discoveryComposite?.components?.discoveryClient
+        ? { components: { discoveryClient: r.components.discoveryComposite.components.discoveryClient } }
+        : r?.components?.discoveryComposite;
       svc.lastChecked = new Date();
       this.finishCheck();
     });
