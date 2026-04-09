@@ -194,6 +194,6 @@ describe('ApiService', () => {
 
   it('getDiscoveryHealth() should GET discovery /actuator/health', () => {
     service.getDiscoveryHealth().subscribe();
-    http.expectOne(r => r.url.includes('/actuator/health') && r.method === 'GET').flush({ status: 'UP' });
+    http.expectOne(r => r.url.includes('/discovery/health') && r.method === 'GET').flush({ status: 'UP' });
   });
 });
