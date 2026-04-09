@@ -112,8 +112,8 @@ jobs:
         run: |
           cd spark-streaming-service
           export PYTHONPATH=$PYTHONPATH:.
-          pytest tests/test_features.py -v \
-            --cov=streaming.features \
+          pytest tests/test_features.py tests/test_processor.py -v \
+            --cov=streaming \
             --cov-report=xml:coverage-spark.xml \
             --cov-report=term-missing
 
@@ -210,7 +210,7 @@ jobs:
             --cov-config=.coveragerc || true
           cd ../spark-streaming-service
           export PYTHONPATH=$PYTHONPATH:.
-          pytest tests/test_features.py --cov=streaming.features \
+          pytest tests/test_features.py tests/test_processor.py --cov=streaming \
             --cov-report=xml:coverage-spark.xml || true
 
       - name: Set up Node 20

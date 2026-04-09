@@ -141,4 +141,59 @@ describe('ApiService', () => {
     expect(req.request.body).toEqual({ enabled: true, interval_hours: 4 });
     req.flush({});
   });
+
+  // ── Map ───────────────────────────────────────────────────────────────────────
+
+  it('getDevicesForMap() should GET /devices/map', () => {
+    service.getDevicesForMap().subscribe();
+    http.expectOne(r => r.url.includes('/devices/map') && r.method === 'GET').flush([]);
+  });
+
+  it('getAreas() should GET /areas', () => {
+    service.getAreas().subscribe();
+    http.expectOne(r => r.url.includes('/areas') && r.method === 'GET').flush([]);
+  });
+
+  it('createArea() should POST /areas', () => {
+    service.createArea('Zone A', [[40.0, -3.0]]).subscribe();
+    const req = http.expectOne(r => r.url.includes('/areas') && r.method === 'POST');
+    expect(req.request.body).toEqual({ name: 'Zone A', polygon: [[40.0, -3.0]] });
+    req.flush({});
+  });
+
+  it('deleteArea() should DELETE /areas/:id', () => {
+    service.deleteArea('area-1').subscribe();
+    http.expectOne(r => r.url.includes('/areas/area-1') && r.method === 'DELETE').flush({});
+  });
+
+  it('updateAreaPolygon() should PATCH /areas/:id/polygon', () => {
+    service.updateAreaPolygon('area-1', 'Zone A', [[40.0, -3.0]]).subscribe();
+    const req = http.expectOne(r => r.url.includes('/areas/area-1/polygon') && r.method === 'PATCH');
+    expect(req.request.body).toEqual({ name: 'Zone A', polygon: [[40.0, -3.0]] });
+    req.flush({});
+  });
+
+  it('assignDeviceToArea() should POST /areas/:areaId/devices/:deviceId', () => {
+    service.assignDeviceToArea('area-1', 'sensor-01').subscribe();
+    http.expectOne(r => r.url.includes('/areas/area-1/devices/sensor-01') && r.method === 'POST').flush({});
+  });
+
+  it('updateDeviceLocation() should PATCH /devices/:id/location', () => {
+    service.updateDeviceLocation('sensor-01', 40.4, -3.7).subscribe();
+    const req = http.expectOne(r => r.url.includes('/devices/sensor-01/location') && r.method === 'PATCH');
+    expect(req.request.body).toEqual({ latitude: 40.4, longitude: -3.7 });
+    req.flush({});
+  });
+
+  // ── Health ────────────────────────────────────────────────────────────────────
+
+  it('getGatewayHealth() should GET /actuator/health', () => {
+    service.getGatewayHealth().subscribe();
+    http.expectOne(r => r.url.includes('/actuator/health') && r.method === 'GET').flush({ status: 'UP' });
+  });
+
+  it('getDiscoveryHealth() should GET discovery /actuator/health', () => {
+    service.getDiscoveryHealth().subscribe();
+    http.expectOne(r => r.url.includes('/actuator/health') && r.method === 'GET').flush({ status: 'UP' });
+  });
 });

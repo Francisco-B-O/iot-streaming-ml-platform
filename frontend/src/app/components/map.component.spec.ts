@@ -240,4 +240,200 @@ describe('MapComponent', () => {
     expect(apiSpy.createArea).toHaveBeenCalledWith('Zone B', polygon);
     expect(apiSpy.getDevicesForMap).toHaveBeenCalledTimes(2);
   }));
+
+  // ── pointInPolygon ────────────────────────────────────────────────────────
+
+  it('pointInPolygon should return true for a point inside a simple polygon', () => {
+    // Square: (0,0),(0,10),(10,10),(10,0)
+    const polygon = [[0, 0], [0, 10], [10, 10], [10, 0]];
+    const result = (component as any).pointInPolygon(5, 5, polygon);
+    expect(result).toBeTrue();
+  });
+
+  it('pointInPolygon should return false for a point outside a simple polygon', () => {
+    const polygon = [[0, 0], [0, 10], [10, 10], [10, 0]];
+    const result = (component as any).pointInPolygon(20, 20, polygon);
+    expect(result).toBeFalse();
+  });
+
+  it('pointInPolygon should return false for empty polygon', () => {
+    const result = (component as any).pointInPolygon(5, 5, []);
+    expect(result).toBeFalse();
+  });
+
+  // ── filteredDevices ───────────────────────────────────────────────────────
+
+  it('filteredDevices should return all devices when no filter set', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    component.filterArea = '';
+    component.filterSeverity = '';
+    const result = (component as any).filteredDevices();
+    expect(result.length).toBe(component.devices.length);
+  }));
+
+  it('filteredDevices should filter by anomaly severity', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    component.filterSeverity = 'anomaly';
+    const result = (component as any).filteredDevices();
+    expect(result.every((d: any) => d.isAnomaly)).toBeTrue();
+  }));
+
+  it('filteredDevices should filter out anomaly devices when severity=normal', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    component.filterSeverity = 'normal';
+    const result = (component as any).filteredDevices();
+    expect(result.every((d: any) => !d.isAnomaly)).toBeTrue();
+  }));
+
+  it('filteredDevices should filter by area membership', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    component.filterArea = 'area-1';
+    const result = (component as any).filteredDevices();
+    // Only devices whose deviceId is in area-1.deviceIds should pass
+    result.forEach((d: any) => {
+      const area = component.areas.find(a => a.id === 'area-1');
+      expect(area?.deviceIds.includes(d.deviceId)).toBeTrue();
+    });
+  }));
+
+  it('filteredDevices returns empty array when filterArea matches no devices', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    // Set an area that has no devices
+    component.areas = [{ id: 'area-empty', name: 'Empty', polygon: [], deviceCount: 0, deviceIds: [] }];
+    component.filterArea = 'area-empty';
+    const result = (component as any).filteredDevices();
+    expect(result.length).toBe(0);
+  }));
+
+  // ── sensorRow ─────────────────────────────────────────────────────────────
+
+  it('sensorRow should return a formatted row when value is present', () => {
+    const html = (component as any).sensorRow('Temp', 42.5, (v: number) => `${v.toFixed(1)} °C`);
+    expect(html).toContain('Temp');
+    expect(html).toContain('42.5 °C');
+  });
+
+  it('sensorRow should return empty string when value is null', () => {
+    const html = (component as any).sensorRow('Temp', null, (v: number) => `${v} °C`);
+    expect(html).toBe('');
+  });
+
+  it('sensorRow should return empty string when value is undefined', () => {
+    const html = (component as any).sensorRow('Humidity', undefined, (v: number) => `${v} %`);
+    expect(html).toBe('');
+  });
+
+  // ── formatSensorDisplay ───────────────────────────────────────────────────
+
+  it('formatSensorDisplay should return Loading… when loading=true', () => {
+    const result = (component as any).formatSensorDisplay(true, 25, (v: number) => `${v} °C`);
+    expect(result).toBe('Loading…');
+  });
+
+  it('formatSensorDisplay should return formatted value when not loading and value present', () => {
+    const result = (component as any).formatSensorDisplay(false, 25.5, (v: number) => `${v.toFixed(1)} °C`);
+    expect(result).toBe('25.5 °C');
+  });
+
+  it('formatSensorDisplay should return N/A when not loading and value is null', () => {
+    const result = (component as any).formatSensorDisplay(false, null, (v: number) => `${v} °C`);
+    expect(result).toBe('N/A');
+  });
+
+  it('formatSensorDisplay should return N/A when not loading and value is undefined', () => {
+    const result = (component as any).formatSensorDisplay(false, undefined, (v: number) => `${v} °C`);
+    expect(result).toBe('N/A');
+  });
+
+  // ── buildTooltip ──────────────────────────────────────────────────────────
+
+  it('buildTooltip should show Loading row when histCache has no entry for device', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'uncached-dev', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: false, areaName: null } as any;
+    const html = (component as any).buildTooltip(d);
+    expect(html).toContain('Loading…');
+  }));
+
+  it('buildTooltip should show ANOMALY badge for anomaly device', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'x', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: true, areaName: null } as any;
+    const html = (component as any).buildTooltip(d);
+    expect(html).toContain('ANOMALY');
+  }));
+
+  it('buildTooltip should NOT show Loading row when histCache has entry for device', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'cached-dev', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: false, areaName: null } as any;
+    (component as any).histCache.set('cached-dev', { temp: 30, hum: 60, vib: 0.1 });
+    const html = (component as any).buildTooltip(d);
+    expect(html).not.toContain('Loading…');
+  }));
+
+  // ── buildPopupHtml ────────────────────────────────────────────────────────
+
+  it('buildPopupHtml should include GPS coordinates when latitude and longitude are set', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'dev-gps', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: false,
+                latitude: 40.4168, longitude: -3.7038, areaName: null, simulated: false, anomalyScore: 0 } as any;
+    const html = (component as any).buildPopupHtml(d);
+    expect(html).toContain('GPS');
+    expect(html).toContain('40.4168');
+  }));
+
+  it('buildPopupHtml should NOT include GPS row when latitude is null', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'dev-nogps', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: false,
+                latitude: null, longitude: null, areaName: null, simulated: false, anomalyScore: 0 } as any;
+    const html = (component as any).buildPopupHtml(d);
+    // GPS row should not appear
+    expect(html).not.toMatch(/<b>GPS<\/b>/);
+  }));
+
+  it('buildPopupHtml should include ANOMALY badge for anomaly device', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'dev-anom', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: true,
+                latitude: 1, longitude: 1, areaName: 'Zone A', simulated: false, anomalyScore: 0.91 } as any;
+    const html = (component as any).buildPopupHtml(d);
+    expect(html).toContain('ANOMALY');
+    expect(html).toContain('0.9100');
+  }));
+
+  it('buildPopupHtml should include NORMAL badge for non-anomaly device', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'dev-norm', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: false,
+                latitude: 1, longitude: 1, areaName: null, simulated: true, anomalyScore: 0 } as any;
+    const html = (component as any).buildPopupHtml(d);
+    expect(html).toContain('NORMAL');
+  }));
+
+  it('buildPopupHtml should show Loading when histCache has no entry', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'uncached-2', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: false,
+                latitude: 1, longitude: 1, areaName: null, simulated: false, anomalyScore: 0 } as any;
+    const html = (component as any).buildPopupHtml(d);
+    expect(html).toContain('Loading…');
+  }));
+
+  it('buildPopupHtml should show sensor values from histCache when available', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+    const d = { deviceId: 'cached-2', type: 'TEMPERATURE', status: 'ACTIVE', isAnomaly: false,
+                latitude: 1, longitude: 1, areaName: null, simulated: false, anomalyScore: 0 } as any;
+    (component as any).histCache.set('cached-2', { temp: 55.5, hum: 70, vib: 0.05 });
+    const html = (component as any).buildPopupHtml(d);
+    expect(html).toContain('55.5');
+  }));
 });
