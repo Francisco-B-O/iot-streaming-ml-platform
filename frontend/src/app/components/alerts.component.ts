@@ -367,7 +367,7 @@ export class AlertsComponent implements OnInit, OnDestroy {
   }
 
   saveThreshold() {
-    if (this.tempThresholdEdit === null) return;
+    if (this.tempThresholdEdit === null || this.tempThresholdEdit <= 0) return;
     this.savingThreshold = true;
     this.api.setTemperatureRule(this.tempThresholdEdit)
       .pipe(catchError(() => of(null)), finalize(() => this.savingThreshold = false))

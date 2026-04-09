@@ -15,8 +15,8 @@ export class ApiService {
     return this.http.get<any[]>(`${this.gw}/devices`);
   }
 
-  createDevice(deviceId: string, type: string, simulated = false): Observable<any> {
-    return this.http.post(`${this.gw}/devices`, { deviceId, type, simulated });
+  createDevice(deviceId: string, type: string, simulated = false, latitude?: number | null, longitude?: number | null): Observable<any> {
+    return this.http.post(`${this.gw}/devices`, { deviceId, type, simulated, latitude, longitude });
   }
 
   deleteDevice(id: string): Observable<any> {
@@ -25,6 +25,35 @@ export class ApiService {
 
   setSimulated(deviceId: string, simulated: boolean): Observable<any> {
     return this.http.patch(`${this.gw}/devices/${deviceId}/simulate`, { simulated });
+  }
+
+  updateDeviceLocation(deviceId: string, latitude: number | null, longitude: number | null): Observable<any> {
+    return this.http.patch(`${this.gw}/devices/${deviceId}/location`, { latitude, longitude });
+  }
+
+  // ─── Map ─────────────────────────────────────────────────────────────────────
+  getDevicesForMap(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.gw}/devices/map`);
+  }
+
+  getAreas(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.gw}/areas`);
+  }
+
+  createArea(name: string, polygon: number[][]): Observable<any> {
+    return this.http.post(`${this.gw}/areas`, { name, polygon });
+  }
+
+  deleteArea(id: string): Observable<any> {
+    return this.http.delete(`${this.gw}/areas/${id}`);
+  }
+
+  updateAreaPolygon(id: string, name: string, polygon: number[][]): Observable<any> {
+    return this.http.patch(`${this.gw}/areas/${id}/polygon`, { name, polygon });
+  }
+
+  assignDeviceToArea(areaId: string, deviceId: string): Observable<any> {
+    return this.http.post(`${this.gw}/areas/${areaId}/devices/${deviceId}`, {});
   }
 
   // ─── Telemetry ───────────────────────────────────────────────────────────────
@@ -101,6 +130,6 @@ export class ApiService {
   }
 
   getDiscoveryHealth(): Observable<any> {
-    return this.http.get(`${environment.apiGatewayUrl.replace('/api/v1', '')}/actuator/health`);
+    return this.http.get(`${environment.discoveryUrl}/actuator/health`);
   }
 }

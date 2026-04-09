@@ -194,9 +194,21 @@ import { catchError, forkJoin, of } from 'rxjs';
                 <mat-icon>{{ predResult.is_anomaly ? 'warning' : 'check_circle' }}</mat-icon>
               </div>
               <div class="result-content">
-                <div class="result-title">{{ predResult.is_anomaly ? 'ANOMALY DETECTED' : 'Normal Reading' }}</div>
+                <div class="result-title">
+                  {{ predResult.is_anomaly ? 'ANOMALY DETECTED' : 'Normal Reading' }}
+                  <span class="severity-badge"
+                        *ngIf="predResult.severity && predResult.severity !== 'NORMAL'"
+                        [class]="'sev-' + predResult.severity?.toLowerCase()">
+                    {{ predResult.severity }}
+                  </span>
+                </div>
                 <div class="result-detail">Score: <strong>{{ predResult.anomaly_score?.toFixed(4) }}</strong></div>
-                <div class="result-detail">Prediction: <strong>{{ predResult.prediction }}</strong></div>
+                <div class="result-detail" *ngIf="predResult.scores">
+                  IF: <strong>{{ predResult.scores.isolation?.toFixed(3) }}</strong> &nbsp;
+                  Z: <strong>{{ predResult.scores.zscore?.toFixed(2) }}&sigma;</strong> &nbsp;
+                  Trend: <strong>{{ predResult.scores.trend ? 'yes' : 'no' }}</strong>
+                </div>
+                <div class="result-reason" *ngIf="predResult.reason">{{ predResult.reason }}</div>
               </div>
             </div>
           </div>
@@ -282,6 +294,19 @@ import { catchError, forkJoin, of } from 'rxjs';
   `,
   styles: [`
     .subtitle { margin: 3px 0 0; font-size: .78rem; color: var(--text-muted); }
+
+    .severity-badge {
+      display: inline-block; margin-left: 8px;
+      padding: 2px 8px; border-radius: 12px; font-size: .68rem; font-weight: 700;
+    }
+    .sev-low      { background: rgba(234,179,8,.15);  color: #ca8a04; }
+    .sev-high     { background: rgba(249,115,22,.15); color: #ea580c; }
+    .sev-critical { background: rgba(239,68,68,.15);  color: #dc2626; }
+
+    .result-reason {
+      margin-top: 4px; font-size: .75rem; color: var(--text-muted);
+      font-style: italic; line-height: 1.4;
+    }
 
     .card-header {
       display: flex; align-items: center; justify-content: space-between;

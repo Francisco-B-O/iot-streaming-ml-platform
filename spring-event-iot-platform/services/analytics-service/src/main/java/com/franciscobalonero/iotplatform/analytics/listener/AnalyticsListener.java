@@ -1,6 +1,7 @@
 package com.franciscobalonero.iotplatform.analytics.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.franciscobalonero.iotplatform.analytics.AnalyticsRedisKeys;
 import com.franciscobalonero.iotplatform.common.event.DeviceTelemetryEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,11 +26,6 @@ public class AnalyticsListener {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    private static final String EVENT_COUNT_KEY = "analytics:event-count:";
-    private static final String LAST_SEEN_KEY   = "analytics:last-seen:";
-    private static final String HISTORY_KEY     = "analytics:history:";
-    private static final int    HISTORY_MAX      = 50;
-
     /**
      * Handles incoming telemetry events: increments event count, updates last-seen,
      * and stores a telemetry snapshot in the device's history list (capped at 50).
@@ -42,10 +38,10 @@ public class AnalyticsListener {
         long now = System.currentTimeMillis();
 
         // 1. Increment event counter
-        redisTemplate.opsForValue().increment(EVENT_COUNT_KEY + deviceId);
+        redisTemplate.opsForValue().increment(AnalyticsRedisKeys.EVENT_COUNT + deviceId);
 
         // 2. Track last-seen timestamp
-        redisTemplate.opsForValue().set(LAST_SEEN_KEY + deviceId, String.valueOf(now));
+        redisTemplate.opsForValue().set(AnalyticsRedisKeys.LAST_SEEN + deviceId, String.valueOf(now));
 
         // 3. Store telemetry snapshot in history (capped at HISTORY_MAX)
         try {
@@ -57,9 +53,9 @@ public class AnalyticsListener {
             snapshot.put("vibration",   payload.getOrDefault("vibration",   0));
 
             String entry = objectMapper.writeValueAsString(snapshot);
-            String histKey = HISTORY_KEY + deviceId;
+            String histKey = AnalyticsRedisKeys.HISTORY + deviceId;
             redisTemplate.opsForList().leftPush(histKey, entry);
-            redisTemplate.opsForList().trim(histKey, 0, HISTORY_MAX - 1);
+            redisTemplate.opsForList().trim(histKey, 0, AnalyticsRedisKeys.HISTORY_MAX - 1);
         } catch (Exception e) {
             log.warn("Could not store telemetry history for device {}: {}", deviceId, e.getMessage());
         }

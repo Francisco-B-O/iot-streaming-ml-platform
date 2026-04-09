@@ -13,12 +13,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.stream.Collectors;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Component responsible for simulating IoT device telemetry data.
@@ -32,10 +31,10 @@ import java.util.stream.Collectors;
 public class TelemetrySimulator {
 
     private final RestTemplate restTemplate = new RestTemplate();
-    private final Random random = new Random();
+    private final SecureRandom random = new SecureRandom();
 
     /** Devices currently marked as simulated, refreshed periodically. */
-    private volatile List<String> simulatedDevices = new ArrayList<>();
+    private final List<String> simulatedDevices = new CopyOnWriteArrayList<>();
 
     @Value("${simulator.gateway-url}")
     private String gatewayUrl;
@@ -46,7 +45,7 @@ public class TelemetrySimulator {
     @Value("${simulator.auth-password:admin123}")
     private String authPassword;
 
-    private String jwtToken;
+    private volatile String jwtToken;
 
     @EventListener(ApplicationReadyEvent.class)
     public void initializeAuth() {
@@ -102,12 +101,13 @@ public class TelemetrySimulator {
             );
 
             if (response.getBody() != null) {
-                List<String> fetched = Arrays.stream(response.getBody())
+                List<String> updated = Arrays.stream(response.getBody())
                     .filter(d -> Boolean.TRUE.equals(d.get("simulated")))
                     .map(d -> (String) d.get("deviceId"))
-                    .collect(Collectors.toList());
-                simulatedDevices = fetched;
-                log.info("Simulator: {} simulated device(s): {}", fetched.size(), fetched);
+                    .toList();
+                simulatedDevices.clear();
+                simulatedDevices.addAll(updated);
+                log.info("Simulator: {} simulated device(s): {}", simulatedDevices.size(), simulatedDevices);
             }
         } catch (Exception e) {
             log.warn("Simulator: Failed to refresh simulated devices: {}", e.getMessage());

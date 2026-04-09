@@ -34,16 +34,22 @@ The landing page. Auto-refreshes every 15 seconds.
 
 Register and manage IoT sensors.
 
-**Register a device** — click "Register Device", enter a Device ID (e.g. `sensor-01`) and choose a type (TEMPERATURE / HUMIDITY / VIBRATION / MULTI_SENSOR). Click Register.
+**Register a device** — click "Register Device", enter a Device ID (e.g. `sensor-01`) and choose a type (TEMPERATURE / HUMIDITY / VIBRATION / MULTI_SENSOR). Optionally enter Latitude / Longitude or click **"Pick on map"** to open a mini map and click to place a pin. Click Register.
 
 **Search** — filters the device table by device ID, type, or status in real time.
 
 **Online/Offline badge** — each device row shows a live badge: green "Online" if the device sent telemetry within the last 2 minutes, grey "Offline" otherwise. Derived from the `lastSeen` field returned by the analytics service.
 
-**Last Seen column** — shows a human-readable relative time (e.g. "3 min ago", "1 hr ago") or "Never" if no telemetry has been received yet.
+**Last Seen column** — shows the timestamp of the last received telemetry, or "—" if none.
+
+**GPS column** — shows `lat, lng` coordinates if set, or a "No GPS" badge.
+- Click the **pin icon** to open the location picker and set / update coordinates
+- Click the **location_off icon** (only shown when GPS is set) to clear coordinates
+
+**Location picker** — a mini Leaflet/OpenStreetMap map opens in a dialog. Click anywhere on the map to place a draggable marker. The picked coordinates are shown below the map. Click **Save Location** to persist via `PATCH /devices/{id}/location`. "Clear GPS" removes coordinates from the device.
 
 **Send telemetry** (sensor icon per row) — opens a modal to manually push a reading for that device:
-- Adjust temperature, humidity, and vibration sliders or type values directly
+- Adjust temperature, humidity, and vibration values
 - Quick presets: **Normal** (22°C / 55% / 0.01 m/s²), **Warning** (75°C / 85% / 3.5 m/s²), **Critical** (115°C / 95% / 8.0 m/s²)
 - Temperature >80°C shows a warning indicator; >100°C shows a critical indicator
 - Clicking Send pushes the reading to the Kafka ingestion pipeline
@@ -129,6 +135,30 @@ Interface for the IsolationForest anomaly detection engine.
 - The current config and last train time are shown below the toggle
 
 ---
+
+## Map
+
+Interactive geospatial view of all IoT devices and configured areas.
+
+**Device markers** — one circle per device that has GPS coordinates:
+- **Green** — active, no anomaly detected
+- **Yellow** — active, anomaly score > 0.3
+- **Red** — active, classified as anomaly by ML platform
+- **Gray** — offline or inactive
+- **Blue** — device has no GPS coordinates (shown as a static chip)
+
+Click any marker to open a popup with device ID, current status, anomaly badge, assigned area, and last temperature reading (loaded on first open, then cached).
+
+**Areas** — coloured polygons drawn on the map. Areas containing anomaly devices turn **red** with a "⚠ anomalies detected" tooltip.
+- **Draw** — click "Draw new area" in the top panel, draw a polygon on the map, enter a name, and click Save
+- **Edit** — use the pencil toolbar to reshape an existing polygon; changes auto-save when you click the confirm button
+- **Delete** — click the trash icon next to an area name in the left panel (with confirmation)
+
+**Heatmap** — toggle "Temperature heatmap" to overlay intensity circles. Intensity is driven by the ML anomaly score (low = 0.15 baseline, high = 1.0 for confirmed anomalies).
+
+**Filters** — filter markers by area or by severity (Normal / Anomaly) using the chips in the top panel.
+
+**Stats chips** — live counts of total devices, anomaly devices, areas, and devices without GPS.
 
 ## Notification Bell
 

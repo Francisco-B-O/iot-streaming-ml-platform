@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     """
     # Kafka Configuration
     KAFKA_BOOTSTRAP_SERVERS: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-    KAFKA_CONSUME_TOPICS: list[str] = ["device-data-processed"]
+    KAFKA_CONSUME_TOPICS: list[str] = ["device-data-enriched"]
     KAFKA_PRODUCE_ML_ANOMALIES_TOPIC: str = "ml-anomalies"
     KAFKA_PRODUCE_ML_PREDICTIONS_TOPIC: str = "ml-predictions"
     KAFKA_GROUP_ID: str = "iot-ml-platform-group"

@@ -10,6 +10,12 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.Map;
 
+/**
+ * Utility component for generating JWT tokens.
+ * Uses HS256 signing with a Base64-encoded secret configured via {@code jwt.secret}.
+ *
+ * @author Francisco Balonero Olivera
+ */
 @Component
 public class JwtUtil {
 
@@ -19,6 +25,13 @@ public class JwtUtil {
     @Value("${jwt.expiration}")
     private long expiration;
 
+    /**
+     * Generates a signed JWT token for the given user.
+     *
+     * @param username The subject (username) to embed in the token.
+     * @param roles    The roles to include as a claim.
+     * @return A compact, URL-safe JWT string.
+     */
     public String generateToken(String username, java.util.Collection<String> roles) {
         return Jwts.builder()
                 .subject(username)
@@ -29,7 +42,7 @@ public class JwtUtil {
                 .compact();
     }
 
-    public SecretKey getSigningKey() {
+    private SecretKey getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(secret);
         return Keys.hmacShaKeyFor(keyBytes);
     }

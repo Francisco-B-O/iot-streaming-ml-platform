@@ -27,7 +27,7 @@ public class RuleController {
     @PostMapping("/temperature")
     @Operation(summary = "Update temperature threshold", description = "Sets a new value for the temperature anomaly detection threshold")
     public void updateThreshold(@RequestBody ThresholdRequest request) {
-        ruleService.updateTemperatureThreshold(request.getThreshold());
+        ruleService.updateTemperatureThreshold(request.threshold());
     }
 
     /**

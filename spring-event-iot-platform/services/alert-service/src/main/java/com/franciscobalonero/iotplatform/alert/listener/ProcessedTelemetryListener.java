@@ -28,11 +28,16 @@ public class ProcessedTelemetryListener {
 
     private final AlertRepository alertRepository;
     private final KafkaTemplate<String, AlertCreatedEvent> kafkaTemplate;
-    private static final String ALERT_TOPIC = "alert-created";
+
+    private static final String ALERT_TOPIC      = "alert-created";
+    private static final String STATUS_CRITICAL  = "CRITICAL";
+    private static final String STATUS_WARNING   = "WARNING";
+    private static final String SEVERITY_HIGH    = "HIGH";
+    private static final String SEVERITY_MEDIUM  = "MEDIUM";
 
     /**
      * Handles processed telemetry events received from Kafka.
-     * If the telemetry status is "CRITICAL", it generates an alert and publishes an {@link AlertCreatedEvent}.
+     * Creates and publishes an {@link AlertCreatedEvent} for CRITICAL and WARNING statuses.
      *
      * @param event The processed telemetry event containing device ID, status, and enriched data.
      */
@@ -40,46 +45,52 @@ public class ProcessedTelemetryListener {
     public void handleProcessedTelemetry(ProcessedTelemetryEvent event) {
         log.info("Checking for alerts in telemetry from device: {}", event.getDeviceId());
 
-        String severity = null;
-        String message = null;
-
-        if ("CRITICAL".equals(event.getStatus())) {
-            severity = "HIGH";
-            message = String.format("Critical temperature detected for device %s. Data: %s",
-                    event.getDeviceId(), event.getEnrichedData());
-            log.warn("CRITICAL status detected for device: {}. Creating HIGH alert.", event.getDeviceId());
-        } else if ("WARNING".equals(event.getStatus())) {
-            severity = "MEDIUM";
-            message = String.format("Warning temperature threshold approached for device %s. Data: %s",
-                    event.getDeviceId(), event.getEnrichedData());
-            log.warn("WARNING status detected for device: {}. Creating MEDIUM alert.", event.getDeviceId());
+        String severity = resolveSeverity(event.getStatus());
+        if (severity == null) {
+            return;
         }
 
-        if (severity != null) {
-            Alert alert = Alert.builder()
-                    .deviceId(event.getDeviceId())
-                    .severity(severity)
-                    .message(message)
-                    .timestamp(LocalDateTime.now(ZoneOffset.UTC))
-                    .acknowledged(false)
-                    .build();
+        String message = buildAlertMessage(event);
+        log.warn("{} status detected for device: {}. Creating {} alert.", event.getStatus(), event.getDeviceId(), severity);
 
-            Alert savedAlert = alertRepository.save(alert);
+        Alert savedAlert = alertRepository.save(Alert.builder()
+                .deviceId(event.getDeviceId())
+                .severity(severity)
+                .message(message)
+                .timestamp(LocalDateTime.now(ZoneOffset.UTC))
+                .acknowledged(false)
+                .build());
 
-            AlertCreatedEvent alertEvent = AlertCreatedEvent.builder()
-                    .eventId(UUID.randomUUID())
-                    .correlationId(event.getCorrelationId())
-                    .eventType("AlertCreatedEvent")
-                    .timestamp(Instant.now())
-                    .sourceService("alert-service")
-                    .alertId(savedAlert.getId())
-                    .deviceId(savedAlert.getDeviceId())
-                    .severity(savedAlert.getSeverity())
-                    .message(savedAlert.getMessage())
-                    .build();
+        AlertCreatedEvent alertEvent = AlertCreatedEvent.builder()
+                .eventId(UUID.randomUUID())
+                .correlationId(event.getCorrelationId())
+                .eventType("AlertCreatedEvent")
+                .timestamp(Instant.now())
+                .sourceService("alert-service")
+                .alertId(savedAlert.getId())
+                .deviceId(savedAlert.getDeviceId())
+                .severity(savedAlert.getSeverity())
+                .message(savedAlert.getMessage())
+                .build();
 
-            kafkaTemplate.send(ALERT_TOPIC, alertEvent.getDeviceId(), alertEvent);
-            log.info("Alert created and published: {} (severity: {})", alertEvent.getAlertId(), severity);
-        }
+        kafkaTemplate.send(ALERT_TOPIC, alertEvent.getDeviceId(), alertEvent);
+        log.info("Alert created and published: {} (severity: {})", alertEvent.getAlertId(), severity);
+    }
+
+    /**
+     * Maps a telemetry processing status to an alert severity.
+     *
+     * @param status The telemetry status string (e.g. "CRITICAL", "WARNING").
+     * @return The corresponding alert severity, or {@code null} if no alert should be raised.
+     */
+    private String resolveSeverity(String status) {
+        if (STATUS_CRITICAL.equals(status)) return SEVERITY_HIGH;
+        if (STATUS_WARNING.equals(status))  return SEVERITY_MEDIUM;
+        return null;
+    }
+
+    private String buildAlertMessage(ProcessedTelemetryEvent event) {
+        return String.format("%s condition detected for device %s. Data: %s",
+                event.getStatus(), event.getDeviceId(), event.getEnrichedData());
     }
 }

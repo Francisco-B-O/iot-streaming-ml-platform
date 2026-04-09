@@ -6,6 +6,11 @@ spring-event-iot-platform/infrastructure/docker/postgres-data/
 iot-ml-platform/data/raw/
 iot-ml-platform/data/processed/
 
+# ML trained model artifacts — regenerated on each training run
+iot-ml-platform/ml/models/*/
+iot-ml-platform/ml/models/latest_model.json
+iot-ml-platform/ml/models/model_registry.json
+
 # Python
 __pycache__/
 *.py[cod]
@@ -25,6 +30,19 @@ target/
 # Node / Angular
 frontend/node_modules/
 frontend/dist/
+frontend/.angular/
+frontend/coverage/
+frontend/package-lock.json
+
+# Python — coverage outputs
+.coverage
+coverage.xml
+coverage-spark.xml
+htmlcov/
+
+# Spark checkpoints
+spark-checkpoint/
+**/spark-checkpoint/
 
 # Environment files with secrets
 .env

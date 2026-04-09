@@ -11,12 +11,13 @@ import { AlertsComponent } from './components/alerts.component';
 import { AnalyticsComponent } from './components/analytics.component';
 import { MlComponent } from './components/ml.component';
 import { HealthComponent } from './components/health.component';
+import { MapComponent } from './components/map.component';
 import { LoginComponent } from './components/login.component';
 import { AuthService } from './services/auth.service';
 import { ApiService } from './services/api.service';
 import { interval, Subscription, catchError, of } from 'rxjs';
 
-type Section = 'dashboard' | 'devices' | 'telemetry' | 'alerts' | 'analytics' | 'ml' | 'health';
+type Section = 'dashboard' | 'devices' | 'telemetry' | 'alerts' | 'analytics' | 'ml' | 'health' | 'map';
 
 interface RecentAlert {
   id: string;
@@ -32,7 +33,7 @@ interface RecentAlert {
   imports: [
     CommonModule, MatIconModule, MatButtonModule, MatTooltipModule, MatRippleModule,
     DashboardComponent, DevicesComponent, TelemetryComponent,
-    AlertsComponent, AnalyticsComponent, MlComponent, HealthComponent, LoginComponent
+    AlertsComponent, AnalyticsComponent, MlComponent, HealthComponent, MapComponent, LoginComponent
   ],
   template: `
     <div *ngIf="!authService.isAuthenticated()">
@@ -194,7 +195,7 @@ interface RecentAlert {
         </header>
 
         <!-- Content -->
-        <main class="content" role="main">
+        <main class="content" [class.map-active]="active === 'map'" role="main">
           <app-dashboard  *ngIf="active === 'dashboard'"></app-dashboard>
           <app-devices    *ngIf="active === 'devices'"></app-devices>
           <app-telemetry  *ngIf="active === 'telemetry'"></app-telemetry>
@@ -202,6 +203,7 @@ interface RecentAlert {
           <app-analytics  *ngIf="active === 'analytics'"></app-analytics>
           <app-ml         *ngIf="active === 'ml'"></app-ml>
           <app-health     *ngIf="active === 'health'"></app-health>
+          <app-map        *ngIf="active === 'map'"></app-map>
         </main>
       </div>
     </div>
@@ -369,6 +371,7 @@ interface RecentAlert {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 1.5rem; gap: 1rem;
       transition: background var(--t-slow), border-color var(--t-slow);
+      position: relative; z-index: 1000;
     }
     .hamburger {
       display: none; background: none; border: none; cursor: pointer;
@@ -426,7 +429,7 @@ interface RecentAlert {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius-xl); box-shadow: var(--shadow-xl);
       display: flex; flex-direction: column;
-      z-index: 200; overflow: hidden;
+      z-index: 9999; overflow: hidden;
       animation: notifIn .18s ease;
     }
     @keyframes notifIn { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
@@ -498,6 +501,8 @@ interface RecentAlert {
 
     /* Content */
     .content { flex: 1; overflow-y: auto; }
+    .content.map-active { overflow: hidden; }
+    app-map { display: block; height: 100%; }
   `]
 })
 export class AppComponent implements OnInit, OnDestroy {
@@ -518,6 +523,7 @@ export class AppComponent implements OnInit, OnDestroy {
     { id: 'analytics' as Section, label: 'Analytics',   icon: 'bar_chart' },
     { id: 'ml'        as Section, label: 'ML Platform', icon: 'psychology' },
     { id: 'health'    as Section, label: 'Health',      icon: 'monitor_heart' },
+    { id: 'map'       as Section, label: 'Map',         icon: 'map' },
   ];
 
   get currentItem() { return this.navItems.find(n => n.id === this.active); }
@@ -542,9 +548,8 @@ export class AppComponent implements OnInit, OnDestroy {
       const pending = alerts.filter((x: any) => !x.acknowledged);
       this.alertBadge = pending.length;
       // Keep latest 10 unacknowledged sorted by timestamp desc for the panel
-      this.recentAlerts = pending
-        .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 10);
+      const sorted = [...pending].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      this.recentAlerts = sorted.slice(0, 10);
     });
   }
 

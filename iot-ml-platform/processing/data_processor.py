@@ -91,14 +91,24 @@ class DataProcessor:
             processed_df = df[selected_cols].copy()
 
             # Convert timestamp to datetime.
-            # utc=True normalises both tz-aware strings ("2026-04-03T12:00:00Z")
-            # and tz-naive values (stored in Parquet without timezone info) to a
-            # consistent UTC-anchored dtype, preventing the "Cannot mix tz-aware
-            # with tz-naive" error that arises when combining data lake history
-            # with fresh API events.
-            processed_df['timestamp'] = pd.to_datetime(
-                processed_df['timestamp'], utc=True
-            )
+            # Handles three formats found in the data lake:
+            #   - ISO strings: "2026-04-07T11:44:23Z"
+            #   - Epoch milliseconds (int/str): 1775562669731
+            #   - Epoch seconds (float/str): 1.7755626697E9
+            ts_raw = processed_df['timestamp']
+            # First attempt: treat as numeric epoch (ms if > 1e11, else seconds)
+            numeric = pd.to_numeric(ts_raw, errors='coerce')
+            is_numeric = numeric.notna()
+            parsed = pd.Series(pd.NaT, index=ts_raw.index, dtype='datetime64[ns, UTC]')
+            if is_numeric.any():
+                is_ms = numeric > 1e11
+                parsed[is_numeric & is_ms]  = pd.to_datetime(numeric[is_numeric & is_ms],  unit='ms', utc=True, errors='coerce')
+                parsed[is_numeric & ~is_ms] = pd.to_datetime(numeric[is_numeric & ~is_ms], unit='s',  utc=True, errors='coerce')
+            # Second attempt: parse remaining as ISO strings
+            still_nat = parsed.isna()
+            if still_nat.any():
+                parsed[still_nat] = pd.to_datetime(ts_raw[still_nat], format='ISO8601', utc=True, errors='coerce')
+            processed_df['timestamp'] = parsed
 
             # Sort by device and timestamp for proper window calculations
             processed_df = processed_df.sort_values(by=['deviceId', 'timestamp'])

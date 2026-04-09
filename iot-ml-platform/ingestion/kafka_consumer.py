@@ -9,6 +9,8 @@ import os
 import time
 from typing import Any
 
+import pandas as pd
+
 from confluent_kafka import Consumer, KafkaException, Message, KafkaError
 
 from config.settings import settings
@@ -41,7 +43,7 @@ class KafkaIngestor:
             self.consumer = Consumer(self.conf)
             self.topics = settings.KAFKA_CONSUME_TOPICS
         except Exception as e:
-            logger.error(f"Failed to initialize Kafka consumer: {e}")
+            logger.error("Failed to initialize Kafka consumer: %s", e)
             raise
 
     def process_event_with_ml(self, event_data: dict[str, Any]) -> dict[str, Any]:
@@ -49,40 +51,61 @@ class KafkaIngestor:
         Processes a single event with ML, updates data, and produces results.
 
         Args:
-            event_data (Dict[str, Any]): The raw telemetry event data.
+            event_data (Dict[str, Any]): The enriched telemetry event data
+                (from device-data-enriched, includes sparkFeatures).
 
         Returns:
-            Dict[str, Any]: The enriched event data.
+            Dict[str, Any]: The event data with ML prediction fields attached.
         """
         try:
-            is_anomaly, score = predictor.predict_anomaly(event_data)
+            prediction = predictor.predict_anomaly(event_data)
+
+            is_anomaly = prediction["is_anomaly"]
+            score      = prediction["anomaly_score"]
 
             # Enrich event data with ML results before storage
             event_data['anomaly_score'] = score
-            event_data['is_anomaly'] = is_anomaly
+            event_data['is_anomaly']    = is_anomaly
 
             # Produce prediction back to Kafka
             ml_producer.produce_prediction(event_data, is_anomaly, score)
+
+            # Normalise timestamp to ISO string for /anomaly-stats display
+            raw_ts = event_data.get("timestamp", "")
+            try:
+                ts_num = float(raw_ts)
+                unit = "ms" if ts_num > 1e11 else "s"
+                iso_ts = pd.Timestamp(ts_num, unit=unit, tz="UTC").isoformat()
+            except (TypeError, ValueError):
+                iso_ts = str(raw_ts)
 
             # Append to shared prediction history (read by /anomaly-stats API)
             with shared_state.history_lock:
                 shared_state.prediction_history.append({
                     "device_id": event_data.get("deviceId", "unknown"),
-                    "timestamp": event_data.get("timestamp", ""),
+                    "timestamp": iso_ts,
                     "is_anomaly": is_anomaly,
-                    "score": score,
+                    "score":      score,
+                    "severity":   prediction.get("severity", "NORMAL"),
+                    "reason":     prediction.get("reason",   ""),
                 })
 
             if is_anomaly:
-                logger.warning(f"ANOMALY DETECTED for device {event_data.get('deviceId')}: Score {score}")
+                logger.warning(
+                    "ANOMALY DETECTED for device %s: score=%.4f severity=%s",
+                    event_data.get("deviceId"), score, prediction.get("severity"),
+                )
                 ml_producer.produce_anomaly(event_data, is_anomaly, score)
             else:
-                logger.info(f"Normal event for device {event_data.get('deviceId')}: Score {score}")
+                logger.info(
+                    "Normal event for device %s: score=%.4f",
+                    event_data.get("deviceId"), score,
+                )
 
             return event_data
 
         except Exception as e:
-            logger.error(f"Error in ML processing: {e}", exc_info=True)
+            logger.error("Error in ML processing: %s", e, exc_info=True)
             # Return original data if enrichment fails to avoid data loss in lake
             return event_data
 
@@ -98,16 +121,16 @@ class KafkaIngestor:
         while retries < max_retries:
             try:
                 self.consumer.subscribe(self.topics)
-                logger.info(f"Successfully subscribed to topics: {self.topics}")
+                logger.info("Successfully subscribed to topics: %s", self.topics)
                 return
             except Exception as e:
                 retries += 1
-                logger.warning(f"Subscription attempt {retries}/{max_retries} failed: {e}")
+                logger.warning("Subscription attempt %d/%d failed: %s", retries, max_retries, e)
                 if retries < max_retries:
-                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    logger.info("Retrying in %d seconds...", retry_delay)
                     time.sleep(retry_delay)
 
-        logger.error(f"Failed to subscribe to topics after {max_retries} attempts")
+        logger.error("Failed to subscribe to topics after %d attempts", max_retries)
         raise RuntimeError(f"Unable to subscribe to Kafka topics: {self.topics}")
 
     def consume_events(self):
@@ -118,8 +141,7 @@ class KafkaIngestor:
         # Subscribe with retry logic
         self.subscribe_with_retry()
 
-        error_count = 0
-        max_consecutive_errors = 10
+        topic_unavailable_count = 0
 
         try:
             while True:
@@ -130,32 +152,32 @@ class KafkaIngestor:
 
                     if msg.error():
                         error_code = msg.error().code()
-                        logger.error(f"Kafka error: {msg.error()}")
 
-                        # Handle partition EOF gracefully
+                        # Handle partition EOF gracefully (not a real error)
                         if error_code == KafkaError._PARTITION_EOF:
                             continue
-                        # Handle unknown topic with backoff
+                        # Topic not yet created — keep retrying indefinitely with backoff
                         elif error_code in [KafkaError.UNKNOWN_TOPIC_OR_PART, KafkaError.COORDINATOR_NOT_AVAILABLE]:
-                            error_count += 1
-                            if error_count < max_consecutive_errors:
-                                logger.warning(f"Topic not available, retrying... ({error_count}/{max_consecutive_errors})")
-                                time.sleep(2)
-                                continue
-                            else:
-                                raise KafkaException(msg.error())
+                            topic_unavailable_count += 1
+                            if topic_unavailable_count % 10 == 1:
+                                logger.warning(
+                                    "Topic not available yet, waiting... (%d retries so far): %s",
+                                    topic_unavailable_count, msg.error(),
+                                )
+                            time.sleep(2)
+                            continue
                         else:
                             raise KafkaException(msg.error())
 
-                    # Reset error count on successful message
-                    error_count = 0
+                    # Reset topic-unavailable counter on successful message
+                    topic_unavailable_count = 0
 
                     try:
                         if msg.value() is None:
                             continue
                         raw_value = msg.value().decode('utf-8')
                         event_data = json.loads(raw_value)
-                        logger.debug(f"Received event: {event_data.get('eventId', 'unknown')}")
+                        logger.debug("Received event: %s", event_data.get('eventId', 'unknown'))
 
                         # 1. Run ML (Real-time scoring)
                         enriched_event = self.process_event_with_ml(event_data)
@@ -164,20 +186,17 @@ class KafkaIngestor:
                         data_lake.store_event(enriched_event)
 
                     except json.JSONDecodeError as e:
-                        logger.error(f"Failed to decode message JSON: {e}")
+                        logger.error("Failed to decode message JSON: %s", e)
                     except Exception as e:
-                        logger.error(f"Error processing message: {e}", exc_info=True)
+                        logger.error("Error processing message: %s", e, exc_info=True)
 
                 except KafkaException as e:
-                    logger.error(f"Kafka exception in consumer loop: {e}")
-                    # Attempt to recover by sleeping and retrying
+                    logger.error("Kafka exception in consumer loop: %s", e)
                     logger.info("Attempting recovery after Kafka exception...")
                     time.sleep(5)
-                    if error_count >= max_consecutive_errors:
-                        raise
 
         except Exception as e:
-            logger.critical(f"Fatal error in consumer loop: {e}", exc_info=True)
+            logger.critical("Fatal error in consumer loop: %s", e, exc_info=True)
             raise
         finally:
             logger.info("Closing Kafka consumer.")

@@ -34,7 +34,11 @@ public class TelemetryListener {
     private final RuleService ruleService;
     private final IdempotencyRecordRepository idempotencyRecordRepository;
     private final KafkaTemplate<String, ProcessedTelemetryEvent> kafkaTemplate;
-    private static final String OUTPUT_TOPIC = "device-data-processed";
+
+    private static final String OUTPUT_TOPIC    = "device-data-processed";
+    private static final String STATUS_NORMAL   = "NORMAL";
+    private static final String STATUS_WARNING  = "WARNING";
+    private static final String STATUS_CRITICAL = "CRITICAL";
 
     /**
      * Handles raw telemetry events received from Kafka.
@@ -67,23 +71,8 @@ public class TelemetryListener {
             // 3. Business Logic: Enrichment & Status Determination
             Map<String, Object> enrichedData = new HashMap<>(event.getPayload());
             enrichedData.put("deviceType", deviceResponse.get().getType());
-            
-            String status = "NORMAL";
-            if (event.getPayload().containsKey("temperature")) {
-                Object tempVal = event.getPayload().get("temperature");
-                if (!(tempVal instanceof Number)) {
-                    log.warn("temperature payload value is not a Number for device {}: {}", event.getDeviceId(), tempVal);
-                    tempVal = null;
-                }
-                double temp = tempVal != null ? ((Number) tempVal).doubleValue() : 0.0;
-                double limit = ruleService.getTemperatureThreshold();
-                
-                if (temp > limit) {
-                    status = "CRITICAL";
-                } else if (temp > limit * 0.8) {
-                    status = "WARNING";
-                }
-            }
+
+            String status = determineStatus(event.getPayload(), event.getDeviceId());
 
             // 4. Create & Publish Processed Event
             ProcessedTelemetryEvent processedEvent = ProcessedTelemetryEvent.builder()
@@ -111,5 +100,28 @@ public class TelemetryListener {
         } finally {
             MDC.clear();
         }
+    }
+
+    /**
+     * Determines the processing status based on the temperature value in the payload
+     * relative to the configured threshold.
+     *
+     * @param payload  The raw telemetry payload map.
+     * @param deviceId The device identifier, used only for warning logs.
+     * @return {@code "CRITICAL"}, {@code "WARNING"}, or {@code "NORMAL"}.
+     */
+    private String determineStatus(Map<String, Object> payload, String deviceId) {
+        Object tempVal = payload.get("temperature");
+        if (!(tempVal instanceof Number)) {
+            if (tempVal != null) {
+                log.warn("temperature payload value is not a Number for device {}: {}", deviceId, tempVal);
+            }
+            return STATUS_NORMAL;
+        }
+        double temp  = ((Number) tempVal).doubleValue();
+        double limit = ruleService.getTemperatureThreshold();
+        if (temp > limit)        return STATUS_CRITICAL;
+        if (temp > limit * 0.8)  return STATUS_WARNING;
+        return STATUS_NORMAL;
     }
 }

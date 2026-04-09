@@ -49,4 +49,10 @@ public class DeviceDto {
      * Whether this device is being simulated (auto-generates telemetry).
      */
     private boolean simulated;
+
+    /** GPS latitude (nullable — device may not have a fixed location). */
+    private Double latitude;
+
+    /** GPS longitude (nullable). */
+    private Double longitude;
 }
