@@ -8,7 +8,7 @@ IoT Telemetry Platform — a distributed system built with Spring Boot microserv
 
 ```
 Device Simulator
-      │  JWT-authenticated POST /api/v1/ingestion
+      │  JWT-authenticated POST /api/v1/telemetry
       ▼
 API Gateway (8080)
       │
@@ -23,24 +23,22 @@ Ingestion Service ──► Kafka: device-data-received
                     ▼
             Kafka: device-data-processed
                     │
-                    ▼
-        Spark Streaming Service
-        (rolling window features: mean, std, trend, …)
-                    │
-                    ▼
-            Kafka: device-data-enriched
-                    │
-                    ▼
-            ML Platform (Python)
-            (Ensemble: IF + Z-score + Trend)
-                    │
-                    ▼
-            Kafka: ml-predictions
-                    │
-              ┌─────┴──────┐
-              ▼            ▼
-        Alert Service   Frontend
-        (PostgreSQL)    (polling /api/v1/...)
+              ┌─────┴──────────────────┐
+              ▼                        ▼
+        Alert Service        Spark Streaming Service
+        (PostgreSQL)         (rolling window features)
+              │                        │
+              ▼                        ▼
+        Kafka: alert-created   Kafka: device-data-enriched
+              │                        │
+              ▼                        ▼
+        Notification Service   ML Platform (Python)
+                               (Ensemble: IF + Z-score + Trend)
+                                        │
+                                        ▼
+                               Kafka: ml-predictions
+                                        │
+                               Frontend (polling /api/v1/...)
 ```
 
 ## Services
@@ -65,15 +63,16 @@ Ingestion Service ──► Kafka: device-data-received
 | Topic | Producer | Consumers |
 |-------|----------|-----------|
 | `device-data-received` | ingestion-service | processing-service, analytics-service |
-| `device-data-processed` | processing-service | alert-service, analytics-service, spark-streaming-service |
+| `device-data-processed` | processing-service | alert-service, spark-streaming-service |
 | `device-data-enriched` | spark-streaming-service | iot-ml-platform |
 | `alert-created` | alert-service | notification-service |
 | `ml-predictions` | iot-ml-platform | (frontend polling via REST) |
+| `ml-anomalies` | iot-ml-platform | — |
 
 ## Infrastructure
 
 - **Kafka** + Zookeeper (Confluent 7.5)
-- **PostgreSQL 16** — auth, device, processing services
+- **PostgreSQL 16** — auth, device, processing, alert services
 - **Redis 7** — analytics service (counters, last-seen, history)
 - **Zipkin** — distributed tracing (Micrometer)
 - **Prometheus + Grafana** — metrics (scrapes /actuator/prometheus)

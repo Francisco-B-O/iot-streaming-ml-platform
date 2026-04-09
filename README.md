@@ -8,7 +8,7 @@ Distributed system for collecting IoT telemetry, detecting anomalies with machin
 
 ## Architecture
 
-9 Spring Boot microservices + a Python ML platform + Angular frontend, all wired together through Kafka and orchestrated with a single `docker-compose.yml`.
+9 Spring Boot microservices + a Python ML platform + a PySpark streaming service + Angular frontend, all wired together through Kafka and orchestrated with a single `docker-compose.yml`.
 
 ```
 Device Simulator
@@ -16,13 +16,20 @@ Device Simulator
   API Gateway (8080)
       ↓
 Ingestion Service → Kafka [device-data-received]
-      ↓
-Processing Service → Kafka [device-data-processed]
-      ↓                          ↓                    ↓
-Alert Service            ML Platform (Python)    Analytics Service
-(PostgreSQL)             (Isolation Forest)      (Redis cache)
       ↓                          ↓
-  Angular Frontend        Kafka [ml-predictions]
+Processing Service         Analytics Service
+      ↓                     (Redis cache)
+Kafka [device-data-processed]
+      ↓                    ↓
+Alert Service       Spark Streaming Service
+(PostgreSQL)        (rolling window features)
+                           ↓
+                    Kafka [device-data-enriched]
+                           ↓
+                    ML Platform (Python)
+                    (IF + Z-score + Trend ensemble)
+                           ↓
+                    Kafka [ml-predictions]
 ```
 
 | Service | Port | Role |
@@ -30,16 +37,17 @@ Alert Service            ML Platform (Python)    Analytics Service
 | gateway-service | 8080 | Entry point — JWT validation, routing, rate limiting |
 | discovery-service | 8761 | Eureka service registry |
 | auth-service | — | User registration, JWT generation |
-| device-service | — | Device CRUD and metadata |
+| device-service | — | Device CRUD, GPS coordinates, area management |
 | ingestion-service | — | Telemetry intake, Kafka producer |
 | processing-service | — | Event enrichment, configurable alert rule evaluation |
 | alert-service | — | Alert persistence and management |
 | analytics-service | — | Per-device event counts, last-seen timestamps, telemetry history (Redis) |
 | notification-service | — | Webhook/email triggers |
-| iot-ml-platform | 8000 | FastAPI ML server — anomaly scoring, model training, real-time stats |
+| spark-streaming-service | — | PySpark rolling window feature engineering |
+| iot-ml-platform | 8000 | FastAPI ML server — ensemble anomaly detection, model training, real-time stats |
 | frontend | 4200 | Angular dashboard |
 
-Kafka topics: `device-data-received` → `device-data-processed` → `ml-predictions`, `ml-anomalies`, `alert-created`
+Kafka topics: `device-data-received` → `device-data-processed` → `device-data-enriched` → `ml-predictions`, `ml-anomalies`, `alert-created`
 
 ---
 
@@ -163,11 +171,17 @@ Full Postman collection (50+ requests) in `postman/`.
 
 ## ML system
 
-**Model:** Isolation Forest — unsupervised, no labeled data required.
+**Ensemble:** Three models vote on each event — Isolation Forest (weight 2), Z-score (weight 1), Trend (weight 1). An anomaly is declared when total weighted votes ≥ 2.
 
-**Features (24):** Raw sensor readings (`temperature`, `humidity`, `vibration`, `deviceType`) plus per-device rolling statistics over a 5-event window: mean, std, min, max, delta.
+| Model | Detects |
+|-------|---------|
+| Isolation Forest | Global statistical outliers (trained on historical Parquet data) |
+| Z-score | Sensor readings deviating > 3σ from rolling mean (uses Spark features) |
+| Trend | Increasing temperature trend with high variance (uses Spark features) |
 
-**Threshold:** Computed from the training score distribution (5th percentile), stored in `ml/models/latest_model.json`. Approximately `-0.036` on the current model.
+**Isolation Forest features (24):** Raw sensor readings (`temperature`, `humidity`, `vibration`) plus per-device rolling statistics over a 5-event window: mean, std, min, max, delta.
+
+**Threshold (IF):** Computed at training time as the 5th percentile of training scores, stored in `ml/models/latest_model.json`. Approximately `-0.036` on the current model.
 
 **Retrain:** `POST http://localhost:8000/train` or via the dashboard ML section.
 
@@ -175,7 +189,7 @@ Full Postman collection (50+ requests) in `postman/`.
 
 **Anomaly stats:** `GET http://localhost:8000/anomaly-stats` — real-time aggregates from the in-memory prediction history (last 500 predictions).
 
-**Inference:** Before scoring, the predictor fetches the last 4 stored events for the device from the Parquet data lake and prepends them to the current event. This gives the feature extractor a proper temporal window, so rolling statistics are non-degenerate and match the training distribution.
+**Inference context:** Before Isolation Forest scoring, the predictor fetches the last 4 stored events for the device from the Parquet data lake and prepends them to the current event, providing a proper 5-event temporal window.
 
 More detail in [`docs/ml.md`](docs/ml.md).
 
@@ -186,11 +200,12 @@ More detail in [`docs/ml.md`](docs/ml.md).
 | Section | Key features |
 |---------|-------------|
 | **Dashboard** | KPIs, alert severity chart, recent alerts, 15 s auto-refresh |
-| **Devices** | CRUD, telemetry modal, **Online/Offline live badge** (2-min window), **Last Seen** column |
+| **Devices** | CRUD, telemetry modal, **Online/Offline live badge** (2-min window), **Last Seen** column, **GPS location picker** |
 | **Telemetry** | Manual sensor input with sliders, presets, session history |
 | **Alerts** | Severity/status filters, bulk ack, **Export CSV**, **Alert Rules panel** (runtime threshold editor) |
 | **Analytics** | Event counts, bar chart, **Telemetry History line chart** (temp/humidity/vibration tabs) |
 | **ML Platform** | Prediction tester, **Anomaly stats KPIs**, **Recent anomalies list**, retrain, **Auto-retrain toggle** |
+| **Map** | Leaflet/OpenStreetMap map with color-coded device markers, draw/edit/delete area polygons, temperature heatmap, filters |
 | **Health** | Gateway, ML, Discovery service status |
 | **Topbar** | **Notification bell** with badge + dropdown of pending critical alerts |
 
@@ -211,6 +226,9 @@ More detail in [`docs/ml.md`](docs/ml.md).
 │   ├── processing/              # Feature engineering
 │   ├── storage/                 # Parquet data lake
 │   └── data/                    # Parquet files (partitioned by day)
+├── spark-streaming-service/     # PySpark rolling window feature engineering
+│   ├── streaming/               # Pure-Python feature logic + Spark processor
+│   └── config/                  # Environment-based configuration
 ├── frontend/                    # Angular 17 dashboard
 ├── docs/                        # Architecture and API reference
 ├── postman/                     # API collection + environment

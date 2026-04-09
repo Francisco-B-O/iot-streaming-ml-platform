@@ -105,6 +105,7 @@ Key methods:
 | `predict(deviceId, temp, hum, vib)` | POST http://…:8000/predict |
 | `trainModel()` | POST http://…:8000/train |
 | `getGatewayHealth()` | GET /actuator/health (via gateway) |
+| `getDiscoveryHealth()` | GET http://…:8761/actuator/health |
 
 ## Components
 

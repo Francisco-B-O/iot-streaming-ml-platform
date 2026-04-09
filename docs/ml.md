@@ -83,6 +83,7 @@ Output dict includes `reason` (human-readable explanation) and `features` breakd
 | GET | `/health` | Service health + model status |
 | POST | `/predict` | Single-event prediction |
 | POST | `/predict/batch` | Batch predictions |
+| GET | `/stats` | Data lake summary (total events, device list, latest timestamp) — cached 60 s |
 | GET | `/anomaly-stats` | Aggregated stats from in-memory history (last 500) |
 | GET | `/autotrain` | Current auto-retrain schedule |
 | POST | `/autotrain` | Set `enabled` (bool) + `interval_hours` (float) |
@@ -91,7 +92,7 @@ Output dict includes `reason` (human-readable explanation) and `features` breakd
 ## Kafka Integration
 
 - **Consumes**: `device-data-enriched` (produced by Spark Streaming Service)
-- **Publishes**: `ml-predictions`
+- **Publishes**: `ml-predictions` (all events), `ml-anomalies` (anomalous events only)
 - Consumer retries on startup: 30 attempts with 2-second backoff
 
 ## Spark Features
