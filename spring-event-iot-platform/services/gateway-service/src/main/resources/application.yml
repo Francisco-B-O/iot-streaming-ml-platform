@@ -12,22 +12,6 @@ spring:
       port: 6379
   cloud:
     gateway:
-      globalcors:
-        corsConfigurations:
-          '[/**]':
-            allowedOriginPatterns: "*"
-            allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
-              - PATCH
-            allowedHeaders: "*"
-            exposedHeaders:
-              - Authorization
-            allowCredentials: false
-            maxAge: 3600
       discovery:
         locator:
           enabled: true
@@ -105,12 +89,6 @@ spring:
               args:
                 redis-rate-limiter.replenishRate: 10
                 redis-rate-limiter.burstCapacity: 20
-        - id: discovery-health-route
-          uri: http://discovery-service:8761
-          predicates:
-            - Path=/api/v1/discovery/health
-          filters:
-            - RewritePath=/api/v1/discovery/health, /actuator/health
 
 eureka:
   client:
