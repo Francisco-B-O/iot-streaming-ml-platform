@@ -38,6 +38,9 @@ describe('DevicesComponent', () => {
     fixture = TestBed.createComponent(DevicesComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    // Override the snack bar instance so the spy is used regardless of
+    // which injector level MatSnackBarModule registered its own provider.
+    (component as any)['snack'] = snackSpy;
   });
 
   it('should create', () => {

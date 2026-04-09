@@ -285,7 +285,7 @@ class TestPredictWithModel:
             mock_lake = MagicMock()
             mock_lake.get_recent_events_for_device.return_value = pd.DataFrame()
 
-            with patch("ml.models.isolation_forest_model.data_lake", mock_lake):
+            with patch("storage.data_lake.data_lake", mock_lake):
                 result = m.predict(event)
 
             assert isinstance(result["is_anomaly"], bool)
@@ -302,7 +302,7 @@ class TestPredictWithModel:
             mock_lake = MagicMock()
             mock_lake.get_recent_events_for_device.return_value = pd.DataFrame()
 
-            with patch("ml.models.isolation_forest_model.data_lake", mock_lake):
+            with patch("storage.data_lake.data_lake", mock_lake):
                 result = m.predict(event)
 
             assert isinstance(result["score"], float)
@@ -327,7 +327,7 @@ class TestPredictWithModel:
             mock_lake = MagicMock()
             mock_lake.get_recent_events_for_device.return_value = pd.DataFrame()
 
-            with patch("ml.models.isolation_forest_model.data_lake", mock_lake):
+            with patch("storage.data_lake.data_lake", mock_lake):
                 result = m.predict(event)
 
             assert result["is_anomaly"] is True
@@ -350,7 +350,7 @@ class TestPredictWithModel:
             mock_lake = MagicMock()
             mock_lake.get_recent_events_for_device.return_value = pd.DataFrame()
 
-            with patch("ml.models.isolation_forest_model.data_lake", mock_lake):
+            with patch("storage.data_lake.data_lake", mock_lake):
                 result = m.predict(event)
 
             assert result["is_anomaly"] is False
@@ -382,7 +382,7 @@ class TestBuildWindow:
         mock_lake = MagicMock()
         mock_lake.get_recent_events_for_device.return_value = pd.DataFrame()
 
-        with patch("ml.models.isolation_forest_model.data_lake", mock_lake):
+        with patch("storage.data_lake.data_lake", mock_lake):
             window = m._build_window(event)
 
         assert len(window) == 1
@@ -412,7 +412,7 @@ class TestBuildWindow:
         mock_lake = MagicMock()
         mock_lake.get_recent_events_for_device.return_value = historical
 
-        with patch("ml.models.isolation_forest_model.data_lake", mock_lake):
+        with patch("storage.data_lake.data_lake", mock_lake):
             window = m._build_window(event)
 
         assert len(window) == 2
