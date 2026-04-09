@@ -320,7 +320,9 @@ export class HealthComponent implements OnInit {
       const svc = this.services[2];
       const discoveryStatus = r?.components?.discoveryComposite?.status;
       svc.status = discoveryStatus === 'UP' ? 'up' : 'down';
-      svc.details = r?.components?.discoveryComposite;
+      svc.details = r?.components?.discoveryComposite?.components?.discoveryClient
+        ? { components: { discoveryClient: r.components.discoveryComposite.components.discoveryClient } }
+        : r?.components?.discoveryComposite;
       svc.lastChecked = new Date();
       this.finishCheck();
     });
